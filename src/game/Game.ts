@@ -290,7 +290,7 @@ export class Game {
     this.titleMode = false;
     this.ui.hideMenu();
     if (this.ui.inventoryOpen) this.ui.closeInventory();
-    this.ui.setHudVisible(true);
+    this.ui.setHudVisible(!this.cinematic);
     this.ui.setCrosshairVisible(true);
     this.mining = null;
   }

@@ -74,3 +74,23 @@ it('diamond tools have durable tier-four progression and craftable recipes', () 
   expect(toolOf(I.DIAMOND_PICKAXE)).toMatchObject({ tier: 4, durability: 1561 });
   expect(RECIPES.find(r => r.out === I.DIAMOND_PICKAXE)?.in).toContainEqual([I.DIAMOND, 3]);
 });
+
+it('extinguishes campfires when water reaches them', () => {
+  const { world, tick } = setup();
+  world.setBlock(0, 11, 0, B.CAMPFIRE);
+  world.setBlock(1, 11, 0, B.WATER);
+  tick(2);
+  expect(world.getBlock(0, 11, 0)).toBe(B.OAK_LOG);
+});
+it('resumes persisted flowing water when its column reloads', () => {
+  const { world, tick } = setup();
+  world.setBlock(0, 13, 0, B.WATER);
+  tick(12);
+  const col = world.getColumn(0, 0)!;
+  const savedBlocks = col.blocks.slice();
+  world.removeColumn(col);
+  world.addColumn(0, 0, savedBlocks);
+  world.setBlock(0, 13, 0, B.AIR);
+  tick(160);
+  expect(isWater(world.getBlock(0, 11, 0))).toBe(false);
+});
