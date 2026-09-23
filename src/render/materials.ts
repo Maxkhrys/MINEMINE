@@ -85,8 +85,9 @@ vec3 applyFog(vec3 col, vec3 worldPos) {
   float haze = 1.0 - exp(-dist * uFogDensity);
   float edge = smoothstep(uFogNear, uFogFar, dist);
   float f = clamp(max(edge, haze), 0.0, 1.0);
-  vec3 fogDir = normalize(vec3(dir.x, max(dir.y, 0.0) * 0.6 + 0.01, dir.z));
-  vec3 fogCol = skyGradient(fogDir);
+  // Match the actual sky ray, including below the horizon. Lifting this ray
+  // turned fully fogged terrain into bright silhouettes against a darker sky.
+  vec3 fogCol = skyGradient(dir);
   return mix(col, fogCol, f);
 }
 `;

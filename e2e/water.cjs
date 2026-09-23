@@ -26,7 +26,7 @@ const assert = require('node:assert/strict');
     }
     r.camera.position.set(0.25,49,8);r.camera.rotation.set(-0.035,0,0);
     const water=r.chunks.group.children.find(m=>m.renderOrder===2).material;
-    window.fixture={r,water,compile:water.onBeforeCompile,defaultSettings};
+    window.fixture={r,water,compile:water.onBeforeCompile,defaultSettings,world,mesher,B};
   });
   fs.mkdirSync('e2e/screenshots',{recursive:true});
   const checks=[];
@@ -53,6 +53,32 @@ const assert = require('node:assert/strict');
       }
     }
   }
+  // A flooded two-block excavation reproduces the edges in the user close-up.
+  await page.evaluate(()=>{
+    const {r,world,mesher,B}=window.fixture;
+    world.setBlock(0,42,-1,B.FALLING_WATER);
+    world.setBlock(0,41,-1,B.FALLING_WATER);
+    for(let cz=-2;cz<=1;cz++)for(let cx=-1;cx<=1;cx++){
+      const cols=[];for(let dz=-1;dz<=1;dz++)for(let dx=-1;dx<=1;dx++)cols.push(world.getColumn(cx+dx,cz+dz));
+      r.chunks.applySection(cols[4],2,mesher.mesh(cols,2));
+    }
+    r.camera.position.set(0.5,44.8,1.8);r.camera.rotation.set(-0.86,0,0);
+  });
+  for(const preset of ['low','medium','high','ultra']) {
+    const stats=await page.evaluate(preset=>{
+      const {r,defaultSettings}=window.fixture;r.applySettings(defaultSettings(preset));
+      r.render(23,true,false);
+      const gl=r.renderer.getContext(),w=gl.drawingBufferWidth,h=gl.drawingBufferHeight,px=new Uint8Array(w*h*4);
+      gl.readPixels(0,0,w,h,gl.RGBA,gl.UNSIGNED_BYTE,px);
+      let black=0,min=255;
+      for(let i=0;i<px.length;i+=4){const l=Math.max(px[i],px[i+1],px[i+2]);min=Math.min(min,l);if(l<8)black++;}
+      return {preset,view:'underwater-hole',black,min,shaderError:r.shaderError,postFailed:r.postFailed};
+    },preset);
+    checks.push(stats);
+    const shot=await page.screenshot({path:`e2e/screenshots/hole-${preset}.jpg`,type:'jpeg',quality:80});
+    if(preset==='high') console.log('RENDER_IMAGE underwater-hole '+shot.toString('base64'));
+  }
+  await page.evaluate(()=>{const {r}=window.fixture;r.camera.position.set(0.25,49,8);r.camera.rotation.set(-0.035,0,0);});
   // Prove the detector sees a deliberately broken water shader.
   const sentinel=await page.evaluate(()=>{
     const {r,water,compile,defaultSettings}=window.fixture;
