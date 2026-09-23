@@ -362,8 +362,12 @@ export class Game {
   private closeInventory(): void {
     if (this.ui.inventoryOpen && !this.ui.closeInventory()) return;
     this.adventureUI.hide();this.saveDirty=true;
-    const grave=this.adventure.data.grave;
-    if(grave){const key=`${grave.x},${grave.y},${grave.z}`,c=this.adventure.data.containers[key];if(c&&c.slots.every(s=>!s)){this.world.setBlock(grave.x,grave.y,grave.z,B.AIR);delete this.adventure.data.containers[key];this.adventure.data.grave=null;this.chunks.flushUrgent();}}
+    for(const [key,c]of Object.entries(this.adventure.data.containers))if(c.kind==='grave'&&c.slots.every(s=>!s)){
+      const [x,y,z]=key.split(',').map(Number);if(!this.world.isLoadedAt(x,z))continue;
+      if(this.world.getBlock(x,y,z)===B.GRAVE)this.world.setBlock(x,y,z,B.AIR);
+      delete this.adventure.data.containers[key];const marker=this.adventure.data.grave;
+      if(marker&&marker.x===x&&marker.y===y&&marker.z===z)this.adventure.data.grave=null;this.chunks.flushUrgent();
+    }
     this.ui.setCrosshairVisible(true);
     if (this.input.forceLocked) {
       this.enterPlaying();

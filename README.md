@@ -1,4 +1,8 @@
-# The Workshop Update
+# MINEMINE — Adventure update
+
+Working furnaces, persistent storage, fish and birds, villages and survival progression. See the Adventure update controls and systems below. Existing saves remain compatible.
+
+## Previous: The Workshop Update
 
 MINEMINE now has a cohesive stone-and-moss interface, a live-world title screen,
 a searchable Creative inventory, and a station-aware recipe book. Existing saves

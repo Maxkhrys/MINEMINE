@@ -19,6 +19,7 @@ export class AdventureUI {
     const click=(e:MouseEvent)=>{e.preventDefault();const n=e.button===2?1:Infinity;
       if(source==='equipment'){this.adventure.unequip(this.inv,label as EquipmentSlot);this.changed();return;}
       if(this.kind==='equipment'){if(!this.adventure.equip(this.inv,index))this.notice('Choose armour or a shield to equip.');this.changed();return;}
+      if(source==='inventory'&&this.kind==='backpack'&&this.inv.slots[index]?.id===I.BACKPACK){this.notice('Keep the backpack in your inventory to carry these items.');return;}
       const slots=this.kind==='backpack'?this.adventure.data.backpack:this.container?.slots;if(!slots)return;
       if(source==='storage'){transfer(slots,index,this.inv.slots,n);if(this.kind==='furnace'&&index<2)this.fuelSlot=index;}
       else if(this.kind==='furnace'){

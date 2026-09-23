@@ -854,8 +854,8 @@ export class UI {
       h('p', { class: 'inv-help' }, creative ? 'Click to pick up · Shift-click to add to hotbar' : 'Click to move · Right-click to split · Shift-click to transfer', h('br'), 'Hover + 1–9 to swap · E / Esc to return'),
     );
     this.invPanel.append(
-      h('nav',{class:'adventure-nav'},...(['backpack','equipment','journal'] as const).map(k=>h('button',{onclick:()=>this.cb.onAdventure?.(k)},k[0].toUpperCase()+k.slice(1)))),
       h('header', { class: 'inventory-header' }, h('div', {}, h('div', { class: 'eyebrow' }, 'MINEMINE / YOUR WORKSHOP'), h('h2', {}, creative ? 'Creative workshop' : 'Inventory & crafting')), h('button', { class: 'close-button', 'aria-label': 'Close inventory', onclick: () => this.cb.onCloseInventory() }, '×')),
+      h('nav',{class:'adventure-nav'},...(['backpack','equipment','journal'] as const).map(k=>h('button',{onclick:()=>this.cb.onAdventure?.(k)},k[0].toUpperCase()+k.slice(1)))),
       h('div', { class: 'inventory-body' }, left, this.renderCrafting(inv)),
     );
     const catalog = this.invPanel.querySelector('.catalog-grid'); if (catalog) catalog.scrollTop = catalogScroll;
