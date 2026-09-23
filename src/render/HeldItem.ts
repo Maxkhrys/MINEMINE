@@ -18,7 +18,7 @@ export class HeldItem {
   private hemi: THREE.HemisphereLight;
   private geometries = new Map<number, THREE.BufferGeometry>();
 
-  /** Supplies a 16x16 sprite canvas for non-block items (tools, food). */
+  /** Supplies the pixel-art canvas for non-block items (tools, food). */
   itemSprite: ((id: number) => HTMLCanvasElement | null) | null = null;
   private spriteMats = new Map<number, THREE.Material>();
 
@@ -37,9 +37,9 @@ export class HeldItem {
       mesh.frustumCulled = false;
       this.arm.add(mesh);
     };
-    part(.17, .21, .19, .05, skin);
-    part(.18, .06, .2, -.085, cuff);
-    part(.185, .34, .205, -.28, sleeve);
+    part(.16, .18, .18, .055, skin);
+    part(.17, .05, .19, -.06, cuff);
+    part(.175, .32, .195, -.245, sleeve);
     this.holder.add(this.arm);
   }
 
@@ -52,7 +52,7 @@ export class HeldItem {
     }
     this.equip = 0;
     this.arm.visible = true;
-    this.arm.position.set(id ? -.085 : -.025, id ? -.14 : -.06, .05);
+    this.arm.position.set(id ? -.085 : -.025, id ? -.07 : .08, .05);
     this.arm.rotation.set(-.42, -.12, -.17);
     if (!id) return;
     if (id >= 256) {
@@ -67,9 +67,9 @@ export class HeldItem {
       this.mesh = new THREE.Mesh(this.geometries.get(id), mat);
       this.mesh.frustumCulled = false;
       const tool = !!toolOf(id);
-      this.mesh.scale.setScalar(tool ? .79 : .47);
+      this.mesh.scale.setScalar(tool ? .61 : .47);
       this.mesh.rotation.set(-.08, -.38, tool ? -.18 : .12);
-      this.mesh.position.set(tool ? .06 : -.035, tool ? .17 : .05, -.055);
+      this.mesh.position.set(tool ? .03 : -.035, tool ? .15 : .05, -.055);
       this.holder.add(this.mesh);
       return;
     }

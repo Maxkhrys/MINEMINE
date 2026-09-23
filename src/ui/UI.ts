@@ -639,6 +639,10 @@ export class UI {
     return !this.invScreen.classList.contains('hidden');
   }
 
+  get carriedStack(): Stack | null {
+    return this.inventoryOpen && this.inv?.mode === 'survival' ? this.cursor : null;
+  }
+
   openInventory(inv: Inventory, stations: Set<Station> = new Set(['hand'])): void {
     this.lastFocus = document.activeElement as HTMLElement;
     this.inv = inv;
@@ -846,7 +850,7 @@ export class UI {
       h('p', { class: 'inv-help' }, creative ? 'Click to pick up · Shift-click to add to hotbar' : 'Click to move · Right-click to split · Shift-click to transfer', h('br'), 'Hover + 1–9 to swap · E / Esc to return'),
     );
     this.invPanel.append(
-      h('header', { class: 'inventory-header' }, h('div', {}, h('div', { class: 'eyebrow' }, 'MINEMINE / YOUR WORKSHOP'), h('h2', {}, creative ? 'Create without limits.' : 'Made for the adventure.')), h('button', { class: 'close-button', 'aria-label': 'Close inventory', onclick: () => this.cb.onCloseInventory() }, '×')),
+      h('header', { class: 'inventory-header' }, h('div', {}, h('div', { class: 'eyebrow' }, 'MINEMINE / YOUR WORKSHOP'), h('h2', {}, creative ? 'Creative workshop' : 'Inventory & crafting')), h('button', { class: 'close-button', 'aria-label': 'Close inventory', onclick: () => this.cb.onCloseInventory() }, '×')),
       h('div', { class: 'inventory-body' }, left, this.renderCrafting(inv)),
     );
     const catalog = this.invPanel.querySelector('.catalog-grid'); if (catalog) catalog.scrollTop = catalogScroll;
@@ -931,4 +935,3 @@ export class UI {
     if (this.inv?.mode !== 'creative' && c.count > 1) this.cursorEl.append(h('span', { class: 'count' }, String(c.count)));
   }
 }
-

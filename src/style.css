@@ -142,7 +142,7 @@ kbd { display: inline-block; padding: 0 5px; font: 600 11px/20px ui-monospace, C
 .station-tabs button.on { background: #f1efdf; border-color: #637c4e; box-shadow: inset 0 -2px #718d53; }
 .station-tabs small { display: block; font-size: 9px; color: #7c674a; margin-top: 4px; font-weight: 400; }
 .craft-filter { display: flex; align-items: center; gap: 8px; margin: 14px 0 10px; font-size: 11px; cursor: pointer; }
-.recipe-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; max-height: 113px; overflow-y: auto; padding: 3px; scrollbar-width: thin; scrollbar-gutter: stable; }
+.recipe-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; max-height: 138px; overflow-y: auto; padding: 3px; scrollbar-width: thin; scrollbar-gutter: stable; }
 .recipe-tile { border-radius: 3px; transition: none; }
 .recipe-tile.unavailable { background: #c5c9b9; }
 .recipe-tile.unavailable img { opacity: .6; }

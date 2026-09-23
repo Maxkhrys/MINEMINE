@@ -200,7 +200,16 @@ export class Inventory {
     return inv;
   }
 
-  serialize(): { slots: number[][]; selected: number } {
+  serialize(carried?: Stack | null): { slots: number[][]; selected: number } {
+    // Cursor items are still owned by the player. Include them in autosaves
+    // without changing the live inventory underneath an open workshop.
+    if (carried) {
+      const snapshot = new Inventory(this.mode);
+      snapshot.slots = this.slots.map(s => s ? { ...s } : null);
+      snapshot.selected = this.selected;
+      snapshot.add(carried.id, carried.count, carried.dur);
+      return snapshot.serialize();
+    }
     return { slots: this.slots.map((s) => (s ? (s.dur !== undefined ? [s.id, s.count, s.dur] : [s.id, s.count]) : [])), selected: this.selected };
   }
 

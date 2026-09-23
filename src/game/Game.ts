@@ -255,7 +255,7 @@ export class Game {
         health: this.health,
         food: this.food,
       },
-      inventory: this.inventory.serialize(),
+      inventory: this.inventory.serialize(this.ui.carriedStack),
       edits: editsToRecord(this.world.edits),
     };
     const ok = writeSave(data);
@@ -970,4 +970,3 @@ export class Game {
     return lines.join('\n');
   }
 }
-

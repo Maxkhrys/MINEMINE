@@ -1,10 +1,34 @@
+# The Workshop Update
+
+MINEMINE now has a cohesive stone-and-moss interface, a live-world title screen,
+a searchable Creative inventory, and a station-aware recipe book. Existing saves
+and settings continue to work.
+
+- **Inventory:** press **E**. Search the catalog, filter Blocks / Tools / Food /
+  Materials, then click or Shift-click items into your hotbar. Survival retains
+  left-click pickup, right-click splitting, Shift-click transfer and 1–9 swapping.
+- **Crafting:** choose By hand, Crafting table or Furnace. Select a recipe to see
+  its ingredient layout and available counts. **Craft** makes one recipe;
+  **Craft max** or Shift-clicking Craft makes up to 64, limited by ingredients and
+  space. Place a held cursor stack before crafting. Stations must be nearby in
+  Survival. Recipes remain automatically assembled from your inventory.
+- **Hands and items:** a visible sleeved arm swings even when empty or aimed at
+  the sky. Pickaxes, axes, shovels, swords, food and materials use new original
+  32px sprites, shared with their extruded first-person models.
+- **Extra polish:** target names and tool hints with mining progress, compass and
+  coordinates, stackable pickup notifications, a rebuilt hotbar, keyboard focus
+  navigation, reduced-motion UI, and loading progress with a gameplay tip.
+- Crafting is atomic: failed crafts do not consume or shuffle ingredients.
+  Returning a held tool preserves its remaining durability, and autosaves include
+  the item on your cursor while the workshop is open.
+
 # Hearthvale Update
 
 A handcrafted tutorial village for MINEMINE, with flowing water and a longer crafting progression.
 
 ## Play and record
 
-Existing browser saves still load normally. To explore the showcase, open **New world**, choose **HEARTHVALE**, then **Create world**. Creating a new world replaces the current browser save, as the menu warns. Fresh installations start in Hearthvale Creative.
+Existing browser saves still load normally. To explore the showcase, open **Create a world**, choose **HEARTHVALE**, then **Create world**. Creating a new world replaces the current browser save, as the menu warns. Fresh installations start in Hearthvale Creative.
 
 - **V** cycles village panorama, bridge, keep, diamond cavern, and square (Hearthvale Creative).
 - **F1** hides the HUD, selection outline and held item for recording.
@@ -78,7 +102,7 @@ Add `?debug` to expose `window.__minemine` for automated testing.
 | `F3` | Debug overlay (position, target block and face, chunk stats) |
 | `Esc` | Release the mouse and open the pause menu |
 
-The pause menu has **Settings**, **Controls**, **New world** (choose a seed and
+The pause menu has **Settings**, **Controls**, **Create a world** (choose a seed and
 Survival or Creative) and **Reset world** (same seed, all changes undone).
 
 ## What's in the game
@@ -98,11 +122,11 @@ Survival or Creative) and **Reset world** (same seed, all changes undone).
   block mines fastest with its tool, and tools wear out (durability bar). Stone,
   cobblestone, bricks and ores need a pickaxe to drop anything, and iron ore
   needs stone or better. Coal ore drops coal, and leaves sometimes drop apples.
-- **Crafting** (inventory, `E`): a recipe list shows what you can make, marks
-  missing ingredients, and **Shift-click** crafts in bulk. Some recipes work by
+- **Crafting** (inventory, `E`): a searchable recipe book shows ingredient layouts and
+  missing counts. **Craft max** or **Shift-click Craft** crafts in bulk. Some recipes work by
   hand (planks, sticks, crafting table). Tools, the furnace, sandstone and glow
   lamps need a **crafting table** nearby. A **furnace** smelts iron, glass,
-  bricks and stone, cooks meat, and bakes bread from tall grass (each uses coal).
+  bricks and stone, cooks meat, and bakes bread from tall grass. Smelting and meat recipes consume coal.
 - **Animals**: pigs, cows and chickens spawn in small groups on grass, wander,
   avoid cliffs, and panic and run when hit. Killing one gives raw meat; cook it
   in a furnace for much more food.
@@ -192,4 +216,3 @@ tests/                 Vitest unit tests
 - Saves live in this browser's `localStorage`, which limits them to a few MB of edits.
 - Browsers make you click to capture the mouse. After pressing `Esc`, some
   browsers wait about a second before they allow it again.
-

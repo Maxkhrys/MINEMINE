@@ -18,6 +18,7 @@ const assert = require('node:assert/strict');
   const fov = page.getByRole('slider', { name: 'Field of view', exact: true });
   await fov.focus(); await fov.press('ArrowRight'); await fov.press('Tab');
   await page.waitForFunction(() => window.__minemine.settings.fov > 70);
+  await page.screenshot({ path: 'e2e/screenshots/workshop-settings.png' });
   await page.getByRole('button', { name: 'Done', exact: true }).click();
   await page.getByRole('button', { name: 'Controls', exact: true }).click();
   assert.ok(await page.locator('.controls').isVisible());
@@ -71,6 +72,7 @@ const assert = require('node:assert/strict');
   await shot('workshop-survival');
   // Cursor return must preserve the durability of a used tool.
   await page.locator('.inventory-hotbar [data-slot="0"]').click();
+  assert.ok(await page.evaluate(() => { const g=window.__minemine; return g.inventory.serialize(g.ui.carriedStack).slots.some(s=>s[0]===260 && s[2]===17); }), 'Autosave includes the used tool on the cursor');
   await page.getByRole('button', { name: 'Close inventory' }).click();
   assert.ok(await page.evaluate(() => window.__minemine.inventory.slots.some(s => s?.id === 260 && s.dur === 17)));
   // Real canvas click in empty air drives the arm through a visible arc.
@@ -78,7 +80,7 @@ const assert = require('node:assert/strict');
   await page.waitForTimeout(600);
   const idle = await page.evaluate(() => window.__minemine.renderer.held.holder.position.toArray());
   await page.mouse.click(720,450);
-  await page.waitForFunction(() => window.__minemine.renderer.held.swing > .1);
+  await page.waitForFunction(() => window.__minemine.renderer.held.swing > .1 && window.__minemine.renderer.held.swing < .85);
   assert.equal(await page.evaluate(() => window.__minemine.renderer.held.arm.visible),true);
   const moving = await page.evaluate(() => window.__minemine.renderer.held.holder.position.toArray());
   assert.ok(Math.hypot(...moving.map((v,i)=>v-idle[i])) > .01, 'Empty hand follows the swing arc');

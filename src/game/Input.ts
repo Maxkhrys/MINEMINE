@@ -28,7 +28,7 @@ export class Input {
     window.addEventListener('keydown', (e) => {
       // Typing recipe names must not open/close inventory or select hotbar slots.
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || (e.target instanceof HTMLElement && e.target.isContentEditable)) {
-        if (e.code === 'Escape') (e.target as HTMLElement).blur();
+        if (e.code === 'Escape') { (e.target as HTMLElement).blur(); this.pressed.add(e.code); }
         return;
       }
       if (e.repeat) {

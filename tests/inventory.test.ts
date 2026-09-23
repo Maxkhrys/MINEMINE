@@ -6,6 +6,14 @@ import { B } from '../src/world/blocks';
 const hand = new Set(['hand'] as const);
 const planks = RECIPES.find(r => r.out === B.OAK_PLANKS)!;
 describe('inventory crafting transactions', () => {
+  it('includes the cursor stack in autosaves without mutating the open inventory', () => {
+    const inv = new Inventory('survival');
+    inv.add(B.STONE, 12);
+    const saved = inv.serialize({ id: I.IRON_PICKAXE, count: 1, dur: 17 });
+    const restored = Inventory.deserialize('survival', saved);
+    expect(inv.count(I.IRON_PICKAXE)).toBe(0);
+    expect(restored.slots.find(s => s?.id === I.IRON_PICKAXE)?.dur).toBe(17);
+  });
   it('does not lose items or reorder slots when only part of the output fits', () => {
     const inv = new Inventory('survival');
     inv.slots = Array.from({ length: 36 }, () => ({ id: B.STONE, count: 64 }));
