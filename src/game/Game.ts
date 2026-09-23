@@ -10,6 +10,8 @@ import { seedFromString } from '../world/noise';
 import { raycastVoxels, type RayHit } from '../world/raycast';
 import { World } from '../world/World';
 import { Input } from './Input';
+import { I, ITEMS, TIER_SPEED, attackDamage, drawItemIcon, foodOf, isBlockItem, itemName, toolOf, type Station } from './items';
+import { MobManager, type Mob } from './Mobs';
 import { Inventory, type GameMode } from './Inventory';
 import { EYE_HEIGHT, Player } from './Player';
 import { editsToRecord, loadSave, recordToEdits, writeSave, type SaveData } from './save';
@@ -18,7 +20,11 @@ import { loadSettings, saveSettings, type Settings } from './settings';
 /** Survival reach, measured from the eye to the entry point of the targeted block. */
 export const REACH = 4.5;
 
-type State = 'loading' | 'menu' | 'playing' | 'inventory';
+type State = 'loading' | 'menu' | 'playing' | 'inventory' | 'dead';
+
+export const MAX_HEALTH = 20;
+export const MAX_FOOD = 20;
+const MAX_AIR = 10;
 
 interface WaterTask {
   x: number;
@@ -74,6 +80,21 @@ export class Game {
   private lastSelected = -1;
   private readonly camDir = new THREE.Vector3();
   private safeModeApplied = false;
+  readonly mobs: MobManager;
+  /** Survival stats, in half-hearts / half-drumsticks. */
+  health = MAX_HEALTH;
+  food = MAX_FOOD;
+  private saturation = 5;
+  private exhaustion = 0;
+  private air = MAX_AIR;
+  private regenTimer = 0;
+  private starveTimer = 0;
+  private drownTimer = 0;
+  private invulnerable = 0;
+  private attackCooldown = 0;
+  private lastWalked = 0;
+  /** Animal under the crosshair when it is closer than the targeted block. */
+  mobTarget: Mob | null = null;
 
   constructor(canvas: HTMLCanvasElement, uiRoot: HTMLElement) {
     this.input = new Input(canvas);
@@ -91,7 +112,20 @@ export class Game {
     this.chunks.renderDistance = this.settings.renderDistance;
     this.player = new Player(this.world);
 
-    this.ui = new UI(uiRoot, this.renderer.textures.icons, this.settings, caps.postSupported, {
+    this.mobs = new MobManager(this.world);
+    this.renderer.scene.add(this.mobs.group);
+    const icons = new Map(this.renderer.textures.icons);
+    const sprites = new Map<number, HTMLCanvasElement>();
+    for (const def of ITEMS.values()) {
+      const icon = drawItemIcon(def);
+      icons.set(def.id, icon.url);
+      sprites.set(def.id, icon.canvas);
+    }
+    this.renderer.held.itemSprite = (id) => sprites.get(id) ?? null;
+
+    this.ui = new UI(uiRoot, icons, this.settings, caps.postSupported, {
+      onCraft: () => this.sfx.craft(),
+      onRespawn: () => this.respawn(),
       onPlay: () => this.requestPlay(),
       onNewWorld: (seedText, mode) => this.newWorld(seedText, mode),
       onResetWorld: () => this.startWorld(this.seed, this.seedText, this.mode, null),
@@ -105,6 +139,7 @@ export class Game {
 
     this.input.onLockChange((locked) => {
       if (locked && (this.state === 'menu' || this.state === 'inventory')) this.enterPlaying();
+      else if (locked && this.state === 'dead') this.input.exitLock();
       else if (!locked && this.state === 'playing') this.pause();
     });
     this.input.onLockError(() => {
@@ -149,6 +184,8 @@ export class Game {
     this.chunks.unloadAll();
     this.world.clear();
     this.renderer.particles.clear();
+    this.mobs.clear();
+    this.ui.hideDeath();
     this.waterQueue = [];
     this.mining = null;
     this.target = null;
@@ -170,6 +207,12 @@ export class Game {
     this.player.pitch = valid ? p.pitch : -0.12;
     this.player.flying = !!(valid && p.flying && mode === 'creative');
     this.player.vx = this.player.vy = this.player.vz = 0;
+    this.player.peakY = this.player.y;
+    this.health = valid && typeof p.health === 'number' && p.health > 0 ? Math.min(MAX_HEALTH, p.health) : MAX_HEALTH;
+    this.food = valid && typeof p.food === 'number' ? Math.max(0, Math.min(MAX_FOOD, p.food)) : MAX_FOOD;
+    this.saturation = 5;
+    this.exhaustion = 0;
+    this.air = MAX_AIR;
 
     this.inventory = save ? Inventory.deserialize(mode, save.inventory ?? undefined) : Inventory.starter(mode);
     this.inventory.onChange(() => this.onInventoryChange());
@@ -187,7 +230,7 @@ export class Game {
     this.renderer.held.setItem(s ? s.id : 0);
     if (this.inventory.selected !== this.lastSelected || !s) {
       this.lastSelected = this.inventory.selected;
-      this.ui.showItemName(s ? blockDef(s.id).name : '');
+      this.ui.showItemName(s ? itemName(s.id) : '');
     }
     this.saveDirty = true;
   }
@@ -208,6 +251,8 @@ export class Game {
         yaw: this.player.yaw,
         pitch: this.player.pitch,
         flying: this.player.flying,
+        health: this.health,
+        food: this.food,
       },
       inventory: this.inventory.serialize(),
       edits: editsToRecord(this.world.edits),
@@ -257,11 +302,34 @@ export class Game {
     this.save();
   }
 
+  /** Crafting stations within reach of the player. */
+  private nearbyStations(): Set<Station> {
+    const st = new Set<Station>(['hand']);
+    if (this.mode === 'creative') {
+      st.add('table');
+      st.add('furnace');
+      return st;
+    }
+    const px = Math.floor(this.player.x);
+    const py = Math.floor(this.player.y);
+    const pz = Math.floor(this.player.z);
+    for (let y = py - 2; y <= py + 3; y++) {
+      for (let z = pz - 4; z <= pz + 4; z++) {
+        for (let x = px - 4; x <= px + 4; x++) {
+          const b = this.world.getBlock(x, y, z);
+          if (b === B.CRAFTING_TABLE) st.add('table');
+          else if (b === B.FURNACE) st.add('furnace');
+        }
+      }
+    }
+    return st;
+  }
+
   private openInventory(): void {
     this.state = 'inventory';
     this.mining = null;
     this.ui.setCrosshairVisible(false);
-    this.ui.openInventory(this.inventory);
+    this.ui.openInventory(this.inventory, this.nearbyStations());
     this.input.exitLock();
   }
 
@@ -319,9 +387,10 @@ export class Game {
       const strafe = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
       // Unloaded terrain acts as a wall; do not simulate until the player's column exists.
       if (this.world.isLoadedAt(Math.floor(this.player.x), Math.floor(this.player.z))) {
-        this.player.update(dt, { forward, strafe, jump: k.has('Space'), down: shift, sprint: shift && !this.player.flying }, this.mode === 'creative');
+        this.player.update(dt, { forward, strafe, jump: k.has('Space'), down: shift, sprint: shift && !this.player.flying && (this.mode === 'creative' || this.food > 6) }, this.mode === 'creative');
       }
       this.footsteps();
+      this.survivalTick(dt);
     } else if (this.state === 'menu' && !this.ui.inventoryOpen && this.menuIsTitle()) {
       this.titleSpin += dt * 0.035;
     }
@@ -333,6 +402,11 @@ export class Game {
     const budget = this.state === 'loading' ? 14 : 5;
     this.chunks.update(cam.position.x, cam.position.z, this.camDir.x, this.camDir.z, budget);
     this.processWater();
+    if (this.state === 'playing' || this.state === 'inventory' || this.state === 'dead') {
+      for (const m of this.mobs.update(dt, this.player.x, this.player.z)) {
+        if (Math.hypot(m.x - this.player.x, m.z - this.player.z) < 16) this.sfx.mob(m.kind);
+      }
+    }
 
     if (this.state === 'loading') this.updateLoading();
 
@@ -420,6 +494,9 @@ export class Game {
       REACH,
       this.hitStore,
     );
+    // Animals in front of the targeted block take priority for left clicks.
+    const mt = this.mobs.raycast(cam.position.x, cam.position.y, cam.position.z, this.camDir.x, this.camDir.y, this.camDir.z, REACH);
+    this.mobTarget = mt && (!this.target || mt.t < this.target.t) ? mt.mob : null;
   }
 
   private handleKeys(): void {
@@ -452,6 +529,8 @@ export class Game {
           } else this.lastSpaceTap = this.time;
         }
       }
+    } else if (this.state === 'dead') {
+      if (pressed.has('Enter') || pressed.has('Space')) this.respawn();
     } else if (this.state === 'inventory') {
       if (pressed.has('KeyE') || pressed.has('Escape')) {
         this.closeInventory();
@@ -469,21 +548,39 @@ export class Game {
 
   // ------------------------------------------------------------------ mining & placing
 
+  /** Whether the held tool is the right kind and tier to harvest a block. */
+  private harvestInfo(id: number): { correct: boolean; canDrop: boolean; tier: number } {
+    const def = blockDef(id);
+    const tool = toolOf(this.inventory.selectedStack?.id);
+    const correct = !!tool && !!def.tool && tool.kind === def.tool;
+    const tier = correct ? tool.tier : 0;
+    return { correct, canDrop: def.minTier === 0 || tier >= def.minTier, tier };
+  }
+
   private breakTime(id: number): number {
     const h = blockDef(id).hardness;
     if (!Number.isFinite(h)) return Infinity;
-    return this.mode === 'creative' ? 0.18 : Math.max(0.05, h);
+    if (this.mode === 'creative') return 0.18;
+    const { correct, canDrop, tier } = this.harvestInfo(id);
+    let t = h;
+    if (!canDrop) t *= 3.3;
+    if (correct) t /= TIER_SPEED[tier];
+    return Math.max(0.05, t);
   }
 
   private handleActions(dt: number): void {
     const input = this.input;
 
-    // Mining: a click breaks the targeted block immediately; holding keeps digging,
-    // each further block taking its break time (shown by the crack overlay).
-    if (input.leftPressed) {
-      if (this.target) this.breakTarget();
+    this.attackCooldown = Math.max(0, this.attackCooldown - dt);
+    if (input.leftPressed && this.mobTarget) {
+      this.attack(this.mobTarget);
       this.mining = null;
-    } else if (input.leftDown && this.target) {
+    } else if (input.leftPressed && this.target && this.breakTime(this.target.id) <= 0.2) {
+      // Soft blocks (and everything in Creative) break on a single click.
+      this.breakTarget();
+      this.mining = null;
+    } else if (input.leftDown && this.target && !this.mobTarget) {
+      // Harder blocks need the button held; the crack overlay shows progress.
       const t = this.target;
       const m = this.mining;
       if (!m || m.x !== t.x || m.y !== t.y || m.z !== t.z) {
@@ -509,7 +606,7 @@ export class Game {
     }
 
     if (input.rightPressed) {
-      this.placeOnTarget();
+      this.useItem();
       this.placeTimer = 0.3;
     } else if (input.rightDown) {
       this.placeTimer -= dt;
@@ -524,6 +621,52 @@ export class Game {
     }
   }
 
+  /** Right click: eat, open a station, or place a block. */
+  private useItem(): void {
+    const stack = this.inventory.selectedStack;
+    const shift = this.input.keys.has('ShiftLeft') || this.input.keys.has('ShiftRight');
+    const t = this.target;
+    if (t && !shift && (t.id === B.CRAFTING_TABLE || t.id === B.FURNACE)) {
+      this.openInventory();
+      return;
+    }
+    const food = foodOf(stack?.id);
+    if (food > 0) {
+      if (this.mode === 'creative' || this.food >= MAX_FOOD) {
+        this.ui.toast("You're not hungry", 1000);
+        return;
+      }
+      this.food = Math.min(MAX_FOOD, this.food + food);
+      this.saturation = Math.min(this.food, this.saturation + food * 0.6);
+      this.inventory.consumeSelected();
+      this.sfx.eat();
+      this.renderer.held.triggerSwing();
+      return;
+    }
+    if (stack && isBlockItem(stack.id)) this.placeOnTarget();
+  }
+
+  private attack(mob: Mob): void {
+    if (this.attackCooldown > 0) return;
+    this.attackCooldown = 0.3;
+    const held = this.inventory.selectedStack?.id;
+    const dmg = this.mode === 'creative' ? 100 : attackDamage(held);
+    mob.health -= dmg;
+    mob.hurtFlash = 0.25;
+    mob.panic = 5;
+    mob.knockback(mob.x - this.player.x, mob.z - this.player.z, 6);
+    this.renderer.held.triggerSwing();
+    this.sfx.mob(mob.kind, true);
+    this.exhaustion += 0.1;
+    if (toolOf(held) && this.inventory.wearSelected()) this.ui.toast('Your tool broke', 1400);
+    if (mob.health <= 0 && !mob.dead) {
+      mob.dead = true;
+      if (this.mode === 'survival') {
+        for (const [id, n] of mob.rollDrops()) if (n > 0 && this.inventory.add(id, n) > 0) this.ui.toast('Inventory full', 1200);
+      }
+    }
+  }
+
   /** Breaks exactly the block in `this.target` (the outlined one). */
   breakTarget(): boolean {
     const t = this.target;
@@ -535,8 +678,15 @@ export class Game {
       if (id === B.BEDROCK) this.ui.toast('Bedrock cannot be broken', 1200);
       return false;
     }
+    const harvest = this.harvestInfo(id);
     if (!this.world.setBlock(x, y, z, B.AIR)) return false;
-    this.collect(def.drop);
+    if (harvest.canDrop) this.collect(def.drop);
+    else if (this.mode === 'survival') this.ui.toast(def.minTier > 1 ? `${def.name} needs a stone pickaxe or better` : `${def.name} needs a pickaxe to collect`, 1600);
+    if ((id === B.OAK_LEAVES || id === B.BIRCH_LEAVES) && Math.random() < 0.1) this.collect(I.APPLE);
+    if (this.mode === 'survival') {
+      this.exhaustion += 0.025;
+      if (toolOf(this.inventory.selectedStack?.id) && this.inventory.wearSelected()) this.ui.toast('Your tool broke', 1400);
+    }
     this.renderer.particles.burst(x, y, z, def.faces[0]);
     this.sfx.breakBlock(def.sound);
     this.renderer.held.triggerSwing();
@@ -598,6 +748,108 @@ export class Game {
     this.saveDirty = true;
     // Refresh the target so the outline reflects the change in this same frame.
     this.updateTarget();
+  }
+
+  // ------------------------------------------------------------------ survival
+
+  /** Hunger, regeneration, starvation, drowning and fall damage (Survival only). */
+  private survivalTick(dt: number): void {
+    const p = this.player;
+    this.invulnerable = Math.max(0, this.invulnerable - dt);
+    if (this.mode !== 'survival') {
+      p.lastFall = 0;
+      this.air = MAX_AIR;
+      return;
+    }
+    // Fall damage: one half-heart per block beyond three.
+    if (p.lastFall > 0) {
+      const dmg = Math.floor(p.lastFall - 3);
+      p.lastFall = 0;
+      if (dmg > 0 && !p.inWater) this.damage(dmg, 'You hit the ground too hard');
+    }
+    // Hunger drains with activity.
+    const moved = p.walked - this.lastWalked;
+    this.lastWalked = p.walked;
+    const sprinting = p.horizontalSpeed > 5;
+    this.exhaustion += dt * 0.012 + moved * (sprinting ? 0.1 : 0.02) + (p.inWater ? dt * 0.02 : 0);
+    if (!p.onGround && p.vy > 8) this.exhaustion += 0.05;
+    while (this.exhaustion >= 1) {
+      this.exhaustion -= 1;
+      if (this.saturation > 0) this.saturation = Math.max(0, this.saturation - 1);
+      else this.food = Math.max(0, this.food - 1);
+    }
+    // Natural regeneration when well fed, starvation when empty.
+    this.regenTimer += dt;
+    if (this.food >= 18 && this.health < MAX_HEALTH && this.regenTimer >= 3) {
+      this.regenTimer = 0;
+      this.health = Math.min(MAX_HEALTH, this.health + 1);
+      this.exhaustion += 0.6;
+    } else if (this.food > 0 || this.health >= MAX_HEALTH) {
+      this.regenTimer = Math.min(this.regenTimer, 3);
+    }
+    if (this.food <= 0) {
+      this.starveTimer += dt;
+      if (this.starveTimer >= 4) {
+        this.starveTimer = 0;
+        this.damage(1, 'You starved');
+      }
+    } else this.starveTimer = 0;
+    // Air runs out underwater.
+    if (p.headInWater) {
+      this.air = Math.max(0, this.air - dt);
+      if (this.air <= 0) {
+        this.drownTimer += dt;
+        if (this.drownTimer >= 1) {
+          this.drownTimer = 0;
+          this.damage(2, 'You drowned');
+        }
+      }
+    } else {
+      this.air = Math.min(MAX_AIR, this.air + dt * 4);
+      this.drownTimer = 0;
+    }
+  }
+
+  damage(amount: number, cause: string): void {
+    if (this.mode !== 'survival' || this.state === 'dead' || this.invulnerable > 0 || amount <= 0) return;
+    this.health = Math.max(0, this.health - amount);
+    this.invulnerable = 0.5;
+    this.ui.flashHurt();
+    this.sfx.hurt();
+    this.saveDirty = true;
+    if (this.health <= 0) this.die(cause);
+  }
+
+  private die(cause: string): void {
+    this.state = 'dead';
+    this.mining = null;
+    if (this.ui.inventoryOpen) this.ui.closeInventory();
+    this.ui.setCrosshairVisible(false);
+    this.ui.showDeath(cause);
+    this.input.exitLock();
+    this.save();
+  }
+
+  respawn(): void {
+    if (this.state !== 'dead') return;
+    this.health = MAX_HEALTH;
+    this.food = MAX_FOOD;
+    this.saturation = 5;
+    this.exhaustion = 0;
+    this.air = MAX_AIR;
+    const p = this.player;
+    p.x = this.spawn.x;
+    p.y = this.spawn.y;
+    p.z = this.spawn.z;
+    p.vx = p.vy = p.vz = 0;
+    p.lastFall = 0;
+    p.resolveStuck();
+    p.peakY = p.y;
+    this.ui.hideDeath();
+    this.state = 'menu';
+    this.ui.showMenu('pause', this.worldInfo());
+    this.save();
+    this.requestPlay();
   }
 
   // ------------------------------------------------------------------ water
@@ -684,6 +936,7 @@ export class Game {
     this.renderer.render(this.time, underwater, this.state === 'playing');
     this.ui.setUnderwater(underwater && !this.renderer.postActive);
     this.ui.setBadge(this.mode, this.player.flying);
+    this.ui.setVitals(this.mode === 'survival', this.health, this.food, this.air, MAX_AIR);
     this.ui.setHintVisible(this.state === 'playing' && this.playTime < 14);
 
     this.fpsFrames++;

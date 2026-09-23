@@ -362,6 +362,58 @@ const painters: Record<TileName, (t: Tile) => void> = {
       return shade(base, 1.08 - d * 0.03 + t.rand() * 0.05);
     });
   },
+  crafting_table_top(t) {
+    painters.oak_planks(t);
+    const dark = hex('#5e4527');
+    for (let i = 1; i < 15; i++) {
+      t.set(i, 1, dark);
+      t.set(i, 14, dark);
+      t.set(1, i, dark);
+      t.set(14, i, dark);
+      t.set(i, 7, shade(dark, 1.1));
+      t.set(7, i, shade(dark, 1.1));
+    }
+  },
+  crafting_table_side(t) {
+    painters.oak_planks(t);
+    for (let x = 0; x < 16; x++) {
+      t.set(x, 0, hex('#8a6a3e'));
+      t.set(x, 1, hex('#6b5030'));
+    }
+    // A saw and a hammer hanging on the side.
+    for (let x = 3; x < 8; x++) t.set(x, 5, hex('#c9ccd0'));
+    for (let x = 3; x < 8; x++) if (x % 2) t.set(x, 6, hex('#9a9da1'));
+    t.set(8, 5, hex('#4a3420'));
+    t.set(9, 5, hex('#4a3420'));
+    for (let y = 4; y < 11; y++) t.set(12, y, hex('#4a3420'));
+    t.set(11, 4, hex('#8d9094'));
+    t.set(13, 4, hex('#8d9094'));
+    t.set(12, 3, hex('#8d9094'));
+  },
+  furnace_side(t) {
+    noisy(t, ['#6f7174', '#78797c', '#818285', '#696a6d'].map((h) => hex(h)), 4, 0.5);
+    for (let x = 0; x < 16; x++) {
+      t.set(x, 0, hex('#5a5b5e'));
+      t.set(x, 15, hex('#4d4e51'));
+    }
+  },
+  furnace_top(t) {
+    noisy(t, ['#747578', '#7d7e81', '#86878a'].map((h) => hex(h)), 4, 0.4);
+    for (let i = 0; i < 16; i++) {
+      t.set(i, 0, hex('#5a5b5e'));
+      t.set(0, i, hex('#5a5b5e'));
+      t.set(i, 15, hex('#4d4e51'));
+      t.set(15, i, hex('#4d4e51'));
+    }
+  },
+  furnace_front(t) {
+    painters.furnace_side(t);
+    for (let y = 8; y < 14; y++) for (let x = 4; x < 12; x++) t.set(x, y, hex('#1c1c1e'));
+    for (let x = 5; x < 11; x++) t.set(x, 12, x % 2 ? hex('#ff9a2e') : hex('#ffcf5a'));
+    for (let x = 5; x < 11; x++) if (t.rand() < 0.6) t.set(x, 11, hex('#e0661c'));
+    for (let x = 3; x < 13; x++) t.set(x, 7, hex('#55565a'));
+    for (let x = 4; x < 12; x += 2) t.set(x, 3, hex('#3a3b3e'));
+  },
   clay(t) {
     noisy(t, ['#979dab', '#a0a6b3', '#a9afbb'].map((h) => hex(h)), 4, 0.35);
   },

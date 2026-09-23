@@ -8,6 +8,8 @@ export interface PlayerSave {
   yaw: number;
   pitch: number;
   flying: boolean;
+  health?: number;
+  food?: number;
 }
 
 export interface SaveData {
@@ -18,7 +20,7 @@ export interface SaveData {
   spawn: SpawnPoint;
   createdAt: number;
   player: PlayerSave | null;
-  inventory: { slots: ([number, number] | null)[]; selected: number } | null;
+  inventory: { slots: number[][]; selected: number } | null;
   /** Column key → flat list of [column index, block id] pairs. */
   edits: Record<string, number[]>;
 }

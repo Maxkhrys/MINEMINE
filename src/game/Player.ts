@@ -41,17 +41,40 @@ export class Player {
   walked = 0;
   horizontalSpeed = 0;
   landedImpact = 0;
+  /** Collision box size; mobs reuse this class with their own dimensions. */
+  width = PLAYER_WIDTH;
+  height = PLAYER_HEIGHT;
+  eyeHeight = EYE_HEIGHT;
+  walkSpeed = WALK_SPEED;
+  sprintSpeed = SPRINT_SPEED;
+  /** Horizontal movement hit a wall during the last step. */
+  blocked = false;
+  /** Seconds of reduced control after a knockback. */
+  stun = 0;
+  /** Highest point since last on the ground; used for fall damage. */
+  peakY = 0;
+  /** Distance fallen on the most recent landing (consumed by the game). */
+  lastFall = 0;
 
-  constructor(private world: World) {}
+  knockback(dx: number, dz: number, strength: number): void {
+    const len = Math.hypot(dx, dz) || 1;
+    this.vx = (dx / len) * strength;
+    this.vz = (dz / len) * strength;
+    this.vy = Math.max(this.vy, 4.5);
+    this.onGround = false;
+    this.stun = 0.35;
+  }
+
+  constructor(protected world: World) {}
 
   get eyeY(): number {
-    return this.y + EYE_HEIGHT;
+    return this.y + this.eyeHeight;
   }
 
   /** Axis-aligned bounds of the player: [minX, minY, minZ, maxX, maxY, maxZ]. */
   bounds(): [number, number, number, number, number, number] {
-    const h = PLAYER_WIDTH / 2;
-    return [this.x - h, this.y, this.z - h, this.x + h, this.y + PLAYER_HEIGHT, this.z + h];
+    const h = this.width / 2;
+    return [this.x - h, this.y, this.z - h, this.x + h, this.y + this.height, this.z + h];
   }
 
   /** Whether the player's box overlaps the unit block at (bx, by, bz). */
@@ -119,7 +142,7 @@ export class Player {
   }
 
   private checkWater(): void {
-    const h = PLAYER_WIDTH / 2 - 0.05;
+    const h = this.width / 2 - 0.05;
     const w = this.world;
     const fx = Math.floor(this.x - h);
     const tx = Math.floor(this.x + h);
@@ -128,7 +151,7 @@ export class Player {
     let body = false;
     for (let z = fz; z <= tz && !body; z++) {
       for (let x = fx; x <= tx && !body; x++) {
-        for (let y = Math.floor(this.y + 0.1); y <= Math.floor(this.y + 1.2); y++) {
+        for (let y = Math.floor(this.y + 0.1); y <= Math.floor(this.y + Math.min(1.2, this.height * 0.66)); y++) {
           if (w.getBlock(x, y, z) === B.WATER) body = true;
         }
       }
@@ -160,12 +183,13 @@ export class Player {
       fx /= len;
       fz /= len;
     }
-    let speed = input.sprint ? SPRINT_SPEED : WALK_SPEED;
+    let speed = input.sprint ? this.sprintSpeed : this.walkSpeed;
     if (this.flying) speed = input.sprint ? FLY_SPRINT_SPEED : FLY_SPEED;
     else if (this.inWater) speed = SWIM_SPEED * (input.sprint ? 1.3 : 1);
     const tx = fx * speed;
     const tz = fz * speed;
-    const accel = this.flying ? 10 : this.onGround ? 16 : this.inWater ? 6 : 4;
+    const accel = (this.flying ? 10 : this.onGround ? 16 : this.inWater ? 6 : 4) * (this.stun > 0 ? 0.08 : 1);
+    this.stun = Math.max(0, this.stun - dt);
     const k = Math.min(1, accel * dt);
     this.vx += (tx - this.vx) * k;
     this.vz += (tz - this.vz) * k;
@@ -194,7 +218,10 @@ export class Player {
     const wasGround = this.onGround;
     if (dy !== wantY) {
       if (wantY < 0) {
-        if (!wasGround) this.landedImpact = -this.vy;
+        if (!wasGround) {
+          this.landedImpact = -this.vy;
+          this.lastFall = Math.max(0, this.peakY - (this.y));
+        }
         this.onGround = true;
         if (this.flying) this.flying = false;
       }
@@ -213,6 +240,9 @@ export class Player {
     if (dz !== wantZ) this.vz = 0;
     if (this.inWater && input.jump && (dx !== wantX || dz !== wantZ)) this.vy = Math.max(this.vy, 4.2);
 
+    this.blocked = dx !== wantX || dz !== wantZ;
+    if (this.onGround || this.inWater || this.flying) this.peakY = this.y;
+    else this.peakY = Math.max(this.peakY, this.y);
     this.horizontalSpeed = Math.hypot(this.vx, this.vz);
     if (this.onGround) this.walked += Math.hypot(dx, dz);
     if (this.y < -64) {

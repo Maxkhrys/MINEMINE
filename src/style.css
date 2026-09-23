@@ -701,3 +701,255 @@ input[type='text'] {
     display: none;
   }
 }
+
+/* ---------- Survival HUD ---------- */
+
+.vitals {
+  position: absolute;
+  left: 50%;
+  bottom: 76px;
+  transform: translateX(-50%);
+  width: 474px;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 3px;
+}
+
+.vitals-row {
+  display: flex;
+  justify-content: space-between;
+}
+
+.bar {
+  display: flex;
+  gap: 1px;
+}
+
+.bar.food {
+  flex-direction: row-reverse;
+}
+
+.bar i {
+  display: block;
+  width: 18px;
+  height: 18px;
+  background-size: 100% 100%;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.6));
+}
+
+.heart.full {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 9' shape-rendering='crispEdges'%3E%3Cpath d='M1 1h3v1h1V1h3v1h1v3H8v1H7v1H6v1H3V7H2V6H1V5H0V2h1z' fill='%23200'/%3E%3Cpath d='M1 2h2v1h1v1h1V3h1V2h2v3H7v1H6v1H3V6H2V5H1z' fill='%23e23131'/%3E%3Cpath d='M2 2h1v1H2z' fill='%23ffb3b3'/%3E%3C/svg%3E");
+}
+
+.heart.half {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 9' shape-rendering='crispEdges'%3E%3Cpath d='M1 1h3v1h1V1h3v1h1v3H8v1H7v1H6v1H3V7H2V6H1V5H0V2h1z' fill='%23200'/%3E%3Cpath d='M1 2h2v1h1v1h1V3h1V2h2v3H7v1H6v1H3V6H2V5H1z' fill='%23462222'/%3E%3Cpath d='M1 2h2v1h1v4H3V6H2V5H1z' fill='%23e23131'/%3E%3C/svg%3E");
+}
+
+.heart.empty {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 9' shape-rendering='crispEdges'%3E%3Cpath d='M1 1h3v1h1V1h3v1h1v3H8v1H7v1H6v1H3V7H2V6H1V5H0V2h1z' fill='%23200'/%3E%3Cpath d='M1 2h2v1h1v1h1V3h1V2h2v3H7v1H6v1H3V6H2V5H1z' fill='%23462222'/%3E%3C/svg%3E");
+}
+
+.hearts.low i.full,
+.hearts.low i.half {
+  animation: heartbeat 0.8s infinite;
+}
+
+@keyframes heartbeat {
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+.drum.full {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 9' shape-rendering='crispEdges'%3E%3Cpath d='M5 0h3v1h1v3H8v1H7v1H6v1H5v1H2V7H1V5H2V4h1V3h1V1h1z' fill='%23200'/%3E%3Cpath d='M5 1h3v3H7v1H6v1H5v1H3V5h1V4h1V1z' fill='%23b8743f'/%3E%3Cpath d='M5 1h2v1H5z' fill='%23e3a36b'/%3E%3Cpath d='M1 6h2v2H1z' fill='%23eee'/%3E%3C/svg%3E");
+}
+
+.drum.half {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 9' shape-rendering='crispEdges'%3E%3Cpath d='M5 0h3v1h1v3H8v1H7v1H6v1H5v1H2V7H1V5H2V4h1V3h1V1h1z' fill='%23200'/%3E%3Cpath d='M5 1h3v3H7v1H6v1H5v1H3V5h1V4h1V1z' fill='%233a2a20'/%3E%3Cpath d='M3 5h2v2H3z' fill='%23b8743f'/%3E%3Cpath d='M1 6h2v2H1z' fill='%23eee'/%3E%3C/svg%3E");
+}
+
+.drum.empty {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 9' shape-rendering='crispEdges'%3E%3Cpath d='M5 0h3v1h1v3H8v1H7v1H6v1H5v1H2V7H1V5H2V4h1V3h1V1h1z' fill='%23200'/%3E%3Cpath d='M5 1h3v3H7v1H6v1H5v1H3V5h1V4h1V1z' fill='%233a2a20'/%3E%3C/svg%3E");
+}
+
+.food.starving i {
+  animation: heartbeat 0.5s infinite;
+}
+
+.bar.air {
+  justify-content: flex-end;
+  min-height: 18px;
+}
+
+.bubble.full {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 9' shape-rendering='crispEdges'%3E%3Ccircle cx='4.5' cy='4.5' r='3.6' fill='%237fc4ff' stroke='%23103a66' stroke-width='1'/%3E%3Cpath d='M3 3h1v1H3z' fill='%23fff'/%3E%3C/svg%3E");
+}
+
+.bubble.empty {
+  visibility: hidden;
+}
+
+.hurt-flash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, rgba(200, 0, 0, 0) 40%, rgba(200, 0, 0, 0.55));
+  opacity: 0;
+}
+
+.hurt-flash.on {
+  animation: hurt 0.45s ease-out;
+}
+
+@keyframes hurt {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.slot .dur {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 4px;
+  height: 3px;
+  background: #111;
+  pointer-events: none;
+}
+
+.slot .dur span {
+  display: block;
+  height: 100%;
+}
+
+/* ---------- Crafting ---------- */
+
+.inventory-panel {
+  width: min(900px, 100%);
+  display: flex;
+  gap: 22px;
+  align-items: flex-start;
+}
+
+.inv-left {
+  flex: 0 0 auto;
+  max-width: 486px;
+}
+
+.crafting {
+  flex: 1;
+  min-width: 260px;
+}
+
+.crafting .station {
+  margin: -8px 0 10px;
+  font-size: 13px;
+  color: var(--accent);
+}
+
+.recipes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.recipe {
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px;
+  text-align: left;
+  font-size: 13px;
+  border-radius: 8px;
+}
+
+.recipe:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.recipe .out {
+  position: relative;
+  width: 36px;
+  height: 36px;
+}
+
+.recipe .out img {
+  width: 36px;
+  height: 36px;
+  image-rendering: pixelated;
+}
+
+.recipe .out b {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  font-size: 12px;
+  text-shadow: 0 1px 0 #000;
+}
+
+.recipe .rname small {
+  display: block;
+  color: var(--warn);
+  font-weight: 500;
+}
+
+.recipe .ings {
+  display: flex;
+  gap: 6px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.recipe .ing {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.recipe .ing img {
+  width: 20px;
+  height: 20px;
+  image-rendering: pixelated;
+}
+
+.recipe .ing.missing {
+  color: var(--danger);
+}
+
+.death {
+  background: rgba(90, 0, 0, 0.55);
+  pointer-events: auto;
+}
+
+.death-title {
+  text-align: center;
+  font-size: 40px;
+  margin: 0 0 6px;
+  color: #ffd2cc;
+}
+
+@media (max-width: 900px) {
+  .inventory-panel {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 620px) {
+  .vitals {
+    width: 340px;
+    bottom: 58px;
+  }
+  .bar i {
+    width: 13px;
+    height: 13px;
+  }
+}

@@ -129,4 +129,45 @@ export class Sfx {
     osc.start(t);
     osc.stop(t + 0.07);
   }
+
+  private tone(freqs: [number, number], duration: number, gain: number, type: OscillatorType = 'sine'): void {
+    const ctx = this.ctx;
+    if (!ctx || !this.master || ctx.state !== 'running' || this.volume <= 0) return;
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freqs[0], t);
+    osc.frequency.exponentialRampToValueAtTime(freqs[1], t + duration);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(gain, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + duration);
+    osc.connect(g).connect(this.master);
+    osc.start(t);
+    osc.stop(t + duration + 0.02);
+  }
+
+  hurt(): void {
+    this.tone([420, 180], 0.22, 0.35, 'square');
+    this.burst('dirt', 0.15, 0.4, 0.8);
+  }
+
+  eat(): void {
+    for (let i = 0; i < 3; i++) setTimeout(() => this.burst('grass', 0.07, 0.35, 0.5 + Math.random() * 0.3), i * 110);
+  }
+
+  mob(kind: 'pig' | 'cow' | 'chicken', hurt = false): void {
+    const base = kind === 'pig' ? 240 : kind === 'cow' ? 130 : 900;
+    const f = base * (hurt ? 1.3 : 0.9 + Math.random() * 0.2);
+    if (kind === 'chicken') {
+      this.tone([f, f * 1.4], 0.08, 0.12, 'triangle');
+      setTimeout(() => this.tone([f * 1.2, f * 0.9], 0.1, 0.1, 'triangle'), 110);
+    } else {
+      this.tone([f, f * 0.7], kind === 'cow' ? 0.6 : 0.25, 0.16, 'sawtooth');
+    }
+  }
+
+  craft(): void {
+    this.burst('wood', 0.12, 0.5, 0.9);
+  }
 }

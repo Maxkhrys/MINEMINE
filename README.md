@@ -34,7 +34,8 @@ Add `?debug` to expose `window.__minemine` for automated testing.
 | `Shift` | Sprint (fly down in Creative) |
 | Mouse | Look |
 | Left click / hold | Mine the outlined block |
-| Right click | Place the selected block on the outlined face |
+| Right click | Place the selected block, eat the held food, or open a crafting table / furnace (hold `Shift` to place against one instead) |
+| Left click an animal | Attack it (swords hit hardest) |
 | Middle click | Pick the targeted block into the hotbar |
 | `1`–`9` / mouse wheel | Select hotbar slot |
 | `E` | Open / close the inventory |
@@ -52,10 +53,26 @@ Survival or Creative) and **Reset world** (same seed, all changes undone).
   beaches and lakes, oak and birch trees, grass and flowers, winding caves, coal and
   iron veins, and a bedrock floor. Every seed has a flat, tree-free spawn area.
   The same seed always generates the same world, in any chunk order.
-- **Survival / Creative**: Survival collects what you mine (stone gives
-  cobblestone, grass gives dirt), uses up blocks when you place them, and harder
-  blocks take longer to break when you hold the button. Creative has an
-  unlimited palette, faster mining and flying.
+- **Survival**: 10 hearts, a hunger bar and an air meter. Hunger drains as you
+  move, sprint, mine and fight. A full stomach slowly heals you, and an empty one
+  hurts. You take fall damage beyond three blocks, and you drown when your air
+  runs out. When you die, a death screen explains why and **Respawn** returns you
+  to the world spawn with your inventory. You start with a wooden pickaxe and
+  axe, some planks, apples and a crafting table.
+- **Tools**: wooden, stone and iron pickaxes, axes, shovels and swords. Each
+  block mines fastest with its tool, and tools wear out (durability bar). Stone,
+  cobblestone, bricks and ores need a pickaxe to drop anything, and iron ore
+  needs stone or better. Coal ore drops coal, and leaves sometimes drop apples.
+- **Crafting** (inventory, `E`): a recipe list shows what you can make, marks
+  missing ingredients, and **Shift-click** crafts in bulk. Some recipes work by
+  hand (planks, sticks, crafting table). Tools, the furnace, sandstone and glow
+  lamps need a **crafting table** nearby. A **furnace** smelts iron, glass,
+  bricks and stone, cooks meat, and bakes bread from tall grass (each uses coal).
+- **Animals**: pigs, cows and chickens spawn in small groups on grass, wander,
+  avoid cliffs, and panic and run when hit. Killing one gives raw meat; cook it
+  in a furnace for much more food.
+- **Creative**: every block, tool and food in the palette, instant mining, flying,
+  no damage or hunger.
 - **Precise targeting**: one camera-centred **3D DDA voxel raycast**
   (Amanatides & Woo) runs each frame. The outline, mining and placement all use
   that same hit. The ray visits voxels in the order it enters them, so it always
@@ -130,8 +147,9 @@ tests/                 Vitest unit tests
 
 ## Known limitations
 
-- No health, hunger, mobs or crafting. Survival means limited blocks, break
-  times and reach.
+- Only passive animals, no hostile mobs. Drops go straight into your inventory
+  (no item entities). Recipes are shapeless (a list, not a grid). Animals aren't
+  saved, and new ones spawn around you after a reload.
 - The sun is fixed in the afternoon (no day/night cycle). Glow lamps glow and
   bloom, but they don't light up nearby blocks (no block-light propagation).
   Sky light is approximated from heightmaps.

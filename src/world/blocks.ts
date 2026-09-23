@@ -34,6 +34,11 @@ export const TILE_NAMES = [
   'glow_lamp',
   'clay',
   'snow_side',
+  'crafting_table_top',
+  'crafting_table_side',
+  'furnace_front',
+  'furnace_side',
+  'furnace_top',
 ] as const;
 
 export type TileName = (typeof TILE_NAMES)[number];
@@ -69,6 +74,8 @@ export const B = {
   GLOW_LAMP: 23,
   CLAY: 24,
   SNOWY_GRASS: 25,
+  CRAFTING_TABLE: 26,
+  FURNACE: 27,
 } as const;
 
 export type RenderKind = 'none' | 'solid' | 'cutout' | 'plant' | 'water';
@@ -105,6 +112,10 @@ export interface BlockDef {
   needsSupport: boolean;
   /** Selection / hit box inside the cell (min xyz, max xyz). */
   box: [number, number, number, number, number, number];
+  /** Tool that mines this block faster (and, with minTier > 0, is required for a drop). */
+  tool: 'pickaxe' | 'axe' | 'shovel' | null;
+  /** Minimum tool tier (1 wood, 2 stone, 3 iron) needed for the block to drop anything. */
+  minTier: number;
   /** Sound family for dig/place/step effects. */
   sound: 'grass' | 'dirt' | 'stone' | 'wood' | 'sand' | 'glass' | 'snow' | 'leaves';
 }
@@ -142,6 +153,8 @@ function solid(id: number, d: Partial2): BlockDef {
     needsSupport: false,
     box: FULL_BOX,
     sound: 'stone',
+    tool: null,
+    minTier: 0,
     ...d,
   };
 }
@@ -166,6 +179,8 @@ function plant(id: number, name: string, t: TileName): BlockDef {
     needsSupport: true,
     box: PLANT_BOX,
     sound: 'grass',
+    tool: null,
+    minTier: 0,
   };
 }
 
@@ -194,23 +209,26 @@ reg({
   needsSupport: false,
   box: FULL_BOX,
   sound: 'stone',
+  tool: null,
+  minTier: 0,
 });
 reg(
   solid(B.GRASS, {
     name: 'Grass Block',
     faces: [tile('grass_side'), tile('grass_side'), tile('grass_top'), tile('dirt'), tile('grass_side'), tile('grass_side')],
-    hardness: 0.45,
+    hardness: 0.6,
     drop: B.DIRT,
     tint: true,
     sound: 'grass',
+    tool: 'shovel',
   }),
 );
-reg(solid(B.DIRT, { name: 'Dirt', faces: all('dirt'), hardness: 0.4, sound: 'dirt' }));
-reg(solid(B.STONE, { name: 'Stone', faces: all('stone'), hardness: 0.9, drop: B.COBBLESTONE }));
-reg(solid(B.COBBLESTONE, { name: 'Cobblestone', faces: all('cobblestone'), hardness: 1.0 }));
-reg(solid(B.SAND, { name: 'Sand', faces: all('sand'), hardness: 0.4, sound: 'sand' }));
-reg(solid(B.GRAVEL, { name: 'Gravel', faces: all('gravel'), hardness: 0.45, sound: 'sand' }));
-reg(solid(B.OAK_LOG, { name: 'Oak Log', faces: pillar('oak_log_side', 'oak_log_top'), hardness: 0.8, sound: 'wood' }));
+reg(solid(B.DIRT, { name: 'Dirt', faces: all('dirt'), hardness: 0.5, sound: 'dirt', tool: 'shovel' }));
+reg(solid(B.STONE, { name: 'Stone', faces: all('stone'), hardness: 1.5, drop: B.COBBLESTONE, tool: 'pickaxe', minTier: 1 }));
+reg(solid(B.COBBLESTONE, { name: 'Cobblestone', faces: all('cobblestone'), hardness: 1.8, tool: 'pickaxe', minTier: 1 }));
+reg(solid(B.SAND, { name: 'Sand', faces: all('sand'), hardness: 0.5, sound: 'sand', tool: 'shovel' }));
+reg(solid(B.GRAVEL, { name: 'Gravel', faces: all('gravel'), hardness: 0.6, sound: 'sand', tool: 'shovel' }));
+reg(solid(B.OAK_LOG, { name: 'Oak Log', faces: pillar('oak_log_side', 'oak_log_top'), hardness: 1.6, sound: 'wood', tool: 'axe' }));
 reg(
   solid(B.OAK_LEAVES, {
     name: 'Oak Leaves',
@@ -219,12 +237,13 @@ reg(
     opaque: false,
     skyBlocking: false,
     hardness: 0.15,
+    drop: 0,
     wind: true,
     tint: true,
     sound: 'leaves',
   }),
 );
-reg(solid(B.OAK_PLANKS, { name: 'Oak Planks', faces: all('oak_planks'), hardness: 0.7, sound: 'wood' }));
+reg(solid(B.OAK_PLANKS, { name: 'Oak Planks', faces: all('oak_planks'), hardness: 1.4, sound: 'wood', tool: 'axe' }));
 reg(
   solid(B.GLASS, {
     name: 'Glass',
@@ -236,11 +255,11 @@ reg(
     sound: 'glass',
   }),
 );
-reg(solid(B.BRICKS, { name: 'Bricks', faces: all('bricks'), hardness: 1.0 }));
-reg(solid(B.SNOW, { name: 'Snow', faces: all('snow'), hardness: 0.25, sound: 'snow' }));
-reg(solid(B.COAL_ORE, { name: 'Coal Ore', faces: all('coal_ore'), hardness: 1.2 }));
-reg(solid(B.IRON_ORE, { name: 'Iron Ore', faces: all('iron_ore'), hardness: 1.4 }));
-reg(solid(B.BIRCH_LOG, { name: 'Birch Log', faces: pillar('birch_log_side', 'birch_log_top'), hardness: 0.8, sound: 'wood' }));
+reg(solid(B.BRICKS, { name: 'Bricks', faces: all('bricks'), hardness: 1.8, tool: 'pickaxe', minTier: 1 }));
+reg(solid(B.SNOW, { name: 'Snow', faces: all('snow'), hardness: 0.3, sound: 'snow', tool: 'shovel' }));
+reg(solid(B.COAL_ORE, { name: 'Coal Ore', faces: all('coal_ore'), hardness: 2.2, drop: 257, tool: 'pickaxe', minTier: 1 }));
+reg(solid(B.IRON_ORE, { name: 'Iron Ore', faces: all('iron_ore'), hardness: 2.6, tool: 'pickaxe', minTier: 2 }));
+reg(solid(B.BIRCH_LOG, { name: 'Birch Log', faces: pillar('birch_log_side', 'birch_log_top'), hardness: 1.6, sound: 'wood', tool: 'axe' }));
 reg(
   solid(B.BIRCH_LEAVES, {
     name: 'Birch Leaves',
@@ -249,11 +268,12 @@ reg(
     opaque: false,
     skyBlocking: false,
     hardness: 0.15,
+    drop: 0,
     wind: true,
     sound: 'leaves',
   }),
 );
-reg(solid(B.SANDSTONE, { name: 'Sandstone', faces: pillar('sandstone_side', 'sandstone_top'), hardness: 0.7 }));
+reg(solid(B.SANDSTONE, { name: 'Sandstone', faces: pillar('sandstone_side', 'sandstone_top'), hardness: 1.2, tool: 'pickaxe', minTier: 1 }));
 reg(plant(B.TALL_GRASS, 'Tall Grass', 'tall_grass'));
 reg(plant(B.RED_FLOWER, 'Poppy', 'red_flower'));
 reg(plant(B.YELLOW_FLOWER, 'Buttercup', 'yellow_flower'));
@@ -276,18 +296,39 @@ reg({
   needsSupport: false,
   box: FULL_BOX,
   sound: 'sand',
+  tool: null,
+  minTier: 0,
 });
 reg(solid(B.BEDROCK, { name: 'Bedrock', faces: all('bedrock'), hardness: Infinity, drop: 0, placeable: false }));
 reg(solid(B.GLOW_LAMP, { name: 'Glow Lamp', faces: all('glow_lamp'), hardness: 0.3, emissive: true, sound: 'glass' }));
-reg(solid(B.CLAY, { name: 'Clay', faces: all('clay'), hardness: 0.45, sound: 'dirt' }));
+reg(solid(B.CLAY, { name: 'Clay', faces: all('clay'), hardness: 0.6, sound: 'dirt', tool: 'shovel' }));
 reg(
   solid(B.SNOWY_GRASS, {
     name: 'Snowy Grass',
     faces: [tile('snow_side'), tile('snow_side'), tile('snow'), tile('dirt'), tile('snow_side'), tile('snow_side')],
-    hardness: 0.45,
+    hardness: 0.6,
     drop: B.DIRT,
     sound: 'snow',
+    tool: 'shovel',
     placeable: false,
+  }),
+);
+reg(
+  solid(B.CRAFTING_TABLE, {
+    name: 'Crafting Table',
+    faces: [tile('crafting_table_side'), tile('crafting_table_side'), tile('crafting_table_top'), tile('oak_planks'), tile('crafting_table_side'), tile('crafting_table_side')],
+    hardness: 1.5,
+    sound: 'wood',
+    tool: 'axe',
+  }),
+);
+reg(
+  solid(B.FURNACE, {
+    name: 'Furnace',
+    faces: [tile('furnace_side'), tile('furnace_side'), tile('furnace_top'), tile('furnace_top'), tile('furnace_front'), tile('furnace_side')],
+    hardness: 2.2,
+    tool: 'pickaxe',
+    minTier: 1,
   }),
 );
 
@@ -335,6 +376,8 @@ export const PALETTE: number[] = [
   B.COAL_ORE,
   B.IRON_ORE,
   B.GLOW_LAMP,
+  B.CRAFTING_TABLE,
+  B.FURNACE,
   B.TALL_GRASS,
   B.RED_FLOWER,
   B.YELLOW_FLOWER,

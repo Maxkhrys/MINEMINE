@@ -1,5 +1,6 @@
-import { blockDef, PALETTE } from '../world/blocks';
-import { HOTBAR_SIZE, INVENTORY_SIZE, MAX_STACK, type GameMode, type Inventory, type Stack } from '../game/Inventory';
+import { PALETTE } from '../world/blocks';
+import { ITEMS, RECIPES, itemName, maxStackOf, toolOf, type Recipe, type Station } from '../game/items';
+import { HOTBAR_SIZE, INVENTORY_SIZE, type GameMode, type Inventory, type Stack } from '../game/Inventory';
 import { PRESETS, type Preset, type Settings } from '../game/settings';
 import { clear, h } from './dom';
 
@@ -9,7 +10,12 @@ export interface UICallbacks {
   onResetWorld(): void;
   onSettings(s: Settings): void;
   onUiSound(): void;
+  onCraft?(): void;
+  onRespawn?(): void;
 }
+
+/** Everything the creative palette offers: blocks, then tools, materials and food. */
+const CREATIVE_PALETTE = [...PALETTE, ...ITEMS.keys()];
 
 export interface WorldInfo {
   seedText: string;
@@ -24,7 +30,8 @@ const CONTROLS: [string, string][] = [
   ['<kbd>Shift</kbd>', 'Sprint (fly down in Creative)'],
   ['Mouse', 'Look around'],
   ['Left click / hold', 'Mine the outlined block (reach 4.5 blocks)'],
-  ['Right click', 'Place the selected block on the outlined face'],
+  ['Right click', 'Place the selected block on the outlined face, eat food, or use a crafting table / furnace'],
+  ['Left click an animal', 'Attack (swords hit harder); animals drop food'],
   ['Middle click', 'Pick the targeted block'],
   ['<kbd>1</kbd>–<kbd>9</kbd> / wheel', 'Select hotbar slot'],
   ['<kbd>E</kbd>', 'Open / close inventory'],
@@ -55,6 +62,14 @@ export class UI {
   private cursorEl: HTMLDivElement;
   private tooltip: HTMLDivElement;
   private fatal: HTMLDivElement;
+  private vitals: HTMLDivElement;
+  private heartsEl: HTMLDivElement;
+  private foodEl: HTMLDivElement;
+  private airEl: HTMLDivElement;
+  private hurtEl: HTMLDivElement;
+  private deathEl: HTMLDivElement;
+  private vitalsKey = '';
+  private stations = new Set<Station>(['hand']);
   private itemNameTimer = 0;
   private toastTimer = 0;
   private menuKind: 'title' | 'pause' = 'title';
@@ -90,7 +105,12 @@ export class UI {
     this.debugEl = h('div', { class: 'debug hidden' });
     this.fpsEl = h('div', { class: 'fps hidden' });
     this.waterEl = h('div', { class: 'vignette-water hidden' });
-    this.hud = h('div', { class: 'hud hidden' }, this.waterEl, this.crosshairEl, this.hotbarEl, this.itemName, this.badge, this.hint, this.debugEl, this.fpsEl);
+    this.heartsEl = h('div', { class: 'bar hearts' });
+    this.foodEl = h('div', { class: 'bar food' });
+    this.airEl = h('div', { class: 'bar air' });
+    this.vitals = h('div', { class: 'vitals' }, h('div', { class: 'vitals-row' }, this.heartsEl, this.foodEl), this.airEl);
+    this.hurtEl = h('div', { class: 'hurt-flash' });
+    this.hud = h('div', { class: 'hud hidden' }, this.hurtEl, this.vitals, this.waterEl, this.crosshairEl, this.hotbarEl, this.itemName, this.badge, this.hint, this.debugEl, this.fpsEl);
     this.toastEl = h('div', { class: 'toast', role: 'status', 'aria-live': 'polite' });
 
     this.loadingBar = h('div');
@@ -109,8 +129,20 @@ export class UI {
     this.cursorEl = h('div', { class: 'cursor-stack hidden' });
     this.tooltip = h('div', { class: 'tooltip hidden' });
     this.fatal = h('div', { class: 'screen fatal hidden' });
+    this.deathEl = h(
+      'div',
+      { class: 'screen death hidden' },
+      h(
+        'div',
+        { class: 'panel' },
+        h('h1', { class: 'death-title' }, 'You died'),
+        h('p', { class: 'status death-cause' }, ''),
+        h('div', { class: 'stack' }, h('button', { class: 'primary', id: 'respawn-btn', onclick: () => this.cb.onRespawn?.() }, 'Respawn')),
+        h('p', { class: 'status' }, 'You keep your inventory and return to the world spawn.'),
+      ),
+    );
 
-    root.append(this.hud, this.menu, this.invScreen, this.loading, this.toastEl, this.cursorEl, this.tooltip, this.fatal);
+    root.append(this.hud, this.menu, this.invScreen, this.deathEl, this.loading, this.toastEl, this.cursorEl, this.tooltip, this.fatal);
 
     window.addEventListener('mousemove', (e) => {
       this.cursorEl.style.left = `${e.clientX}px`;
@@ -149,8 +181,14 @@ export class UI {
     clear(el);
     if (!stack) return;
     const icon = this.icons.get(stack.id);
-    if (icon) el.append(h('img', { src: icon, alt: blockDef(stack.id).name, draggable: 'false' }));
+    if (icon) el.append(h('img', { src: icon, alt: itemName(stack.id), draggable: 'false' }));
     if (!hideCount && stack.count > 1) el.append(h('span', { class: 'count' }, String(stack.count)));
+    const t = toolOf(stack.id);
+    if (t && stack.dur !== undefined && stack.dur < t.durability) {
+      const f = Math.max(0, stack.dur / t.durability);
+      const bar = h('span', { class: 'dur' }, h('span', { style: `width:${Math.round(f * 100)}%;background:hsl(${Math.round(f * 120)},80%,50%)` }));
+      el.append(bar);
+    }
   }
 
   showItemName(name: string): void {
@@ -181,6 +219,46 @@ export class UI {
   setFps(text: string | null): void {
     this.fpsEl.classList.toggle('hidden', text === null);
     if (text !== null) this.fpsEl.textContent = text;
+  }
+
+  /** Hearts, hunger and air bubbles. Pass show=false in creative mode. */
+  setVitals(show: boolean, health: number, food: number, air: number, maxAir: number): void {
+    const key = show ? `${Math.ceil(health)}|${Math.ceil(food)}|${Math.ceil(air)}` : 'off';
+    if (key === this.vitalsKey) return;
+    this.vitalsKey = key;
+    this.vitals.classList.toggle('hidden', !show);
+    if (!show) return;
+    const icons = (el: HTMLElement, value: number, kind: string) => {
+      clear(el);
+      for (let i = 0; i < 10; i++) {
+        const v = value - i * 2;
+        el.append(h('i', { class: `${kind} ${v >= 2 ? 'full' : v >= 1 ? 'half' : 'empty'}` }));
+      }
+    };
+    icons(this.heartsEl, Math.ceil(health), 'heart');
+    icons(this.foodEl, Math.ceil(food), 'drum');
+    this.foodEl.classList.toggle('starving', food <= 0);
+    this.heartsEl.classList.toggle('low', health <= 4);
+    clear(this.airEl);
+    if (air < maxAir) {
+      const bubbles = Math.ceil((air / maxAir) * 10);
+      for (let i = 0; i < 10; i++) this.airEl.append(h('i', { class: `bubble ${i < bubbles ? 'full' : 'empty'}` }));
+    }
+  }
+
+  flashHurt(): void {
+    this.hurtEl.classList.remove('on');
+    void this.hurtEl.offsetWidth;
+    this.hurtEl.classList.add('on');
+  }
+
+  showDeath(cause: string): void {
+    (this.deathEl.querySelector('.death-cause') as HTMLElement).textContent = cause;
+    this.deathEl.classList.remove('hidden');
+  }
+
+  hideDeath(): void {
+    this.deathEl.classList.add('hidden');
   }
 
   toast(msg: string, ms = 2600): void {
@@ -473,8 +551,9 @@ export class UI {
     return !this.invScreen.classList.contains('hidden');
   }
 
-  openInventory(inv: Inventory): void {
+  openInventory(inv: Inventory, stations: Set<Station> = new Set(['hand'])): void {
     this.inv = inv;
+    this.stations = stations;
     this.cursor = null;
     this.hovered = -1;
     this.invScreen.classList.remove('hidden');
@@ -498,8 +577,9 @@ export class UI {
     const inv = this.inv;
     if (!inv || this.hovered < 0) return;
     if (this.hovered >= 1000) {
-      const id = PALETTE[this.hovered - 1000];
-      inv.slots[n] = { id, count: MAX_STACK };
+      const id = CREATIVE_PALETTE[this.hovered - 1000];
+      const t = toolOf(id);
+      inv.slots[n] = t ? { id, count: 1, dur: t.durability } : { id, count: maxStackOf(id) };
     } else if (this.hovered !== n) {
       const tmp = inv.slots[n];
       inv.slots[n] = inv.slots[this.hovered];
@@ -543,19 +623,19 @@ export class UI {
         let left = slot.count;
         for (let k = range[0]; k < range[1] && left > 0; k++) {
           const t = inv.slots[k];
-          if (t && t.id === slot.id && t.count < MAX_STACK) {
-            const n = Math.min(left, MAX_STACK - t.count);
+          if (t && t.id === slot.id && t.count < maxStackOf(slot.id)) {
+            const n = Math.min(left, maxStackOf(slot.id) - t.count);
             t.count += n;
             left -= n;
           }
         }
         for (let k = range[0]; k < range[1] && left > 0; k++) {
           if (!inv.slots[k]) {
-            inv.slots[k] = { id: slot.id, count: left };
+            inv.slots[k] = { ...slot, count: left };
             left = 0;
           }
         }
-        inv.slots[i] = left > 0 ? { id: slot.id, count: left } : null;
+        inv.slots[i] = left > 0 ? { ...slot, count: left } : null;
       }
     } else if (e.button === 0) {
       if (!this.cursor) {
@@ -565,7 +645,7 @@ export class UI {
         inv.slots[i] = this.cursor;
         this.cursor = null;
       } else if (slot.id === this.cursor.id) {
-        const n = Math.min(this.cursor.count, MAX_STACK - slot.count);
+        const n = Math.min(this.cursor.count, maxStackOf(slot.id) - slot.count);
         slot.count += n;
         this.cursor.count -= n;
         if (this.cursor.count <= 0) this.cursor = null;
@@ -577,15 +657,15 @@ export class UI {
       if (!this.cursor) {
         if (slot) {
           const half = Math.ceil(slot.count / 2);
-          this.cursor = { id: slot.id, count: half };
+          this.cursor = { ...slot, count: half };
           slot.count -= half;
           if (slot.count <= 0) inv.slots[i] = null;
         }
       } else if (!slot) {
-        inv.slots[i] = { id: this.cursor.id, count: 1 };
+        inv.slots[i] = { ...this.cursor, count: 1 };
         this.cursor.count--;
         if (this.cursor.count <= 0) this.cursor = null;
-      } else if (slot.id === this.cursor.id && slot.count < MAX_STACK) {
+      } else if (slot.id === this.cursor.id && slot.count < maxStackOf(slot.id)) {
         slot.count++;
         this.cursor.count--;
         if (this.cursor.count <= 0) this.cursor = null;
@@ -606,10 +686,12 @@ export class UI {
     } else if (e.shiftKey) {
       let target = inv.slots.findIndex((s, k) => k < HOTBAR_SIZE && !s);
       if (target < 0) target = inv.selected;
-      inv.slots[target] = { id, count: MAX_STACK };
+      const t = toolOf(id);
+      inv.slots[target] = t ? { id, count: 1, dur: t.durability } : { id, count: maxStackOf(id) };
       inv.changed();
     } else {
-      this.cursor = { id, count: e.button === 2 ? 1 : MAX_STACK };
+      const t = toolOf(id);
+      this.cursor = t ? { id, count: 1, dur: t.durability } : { id, count: e.button === 2 ? 1 : maxStackOf(id) };
     }
     this.renderInventory();
   }
@@ -619,11 +701,16 @@ export class UI {
     if (!inv) return;
     const creative = inv.mode === 'creative';
     clear(this.invPanel);
-    const name = (i: number) => () => (inv.slots[i] ? blockDef(inv.slots[i]!.id).name : null);
+    const name = (i: number) => () => {
+      const st = inv.slots[i];
+      if (!st) return null;
+      const t = toolOf(st.id);
+      return t && st.dur !== undefined ? `${itemName(st.id)} (${st.dur}/${t.durability})` : itemName(st.id);
+    };
     const main = h('div', { class: 'inv-grid' });
     if (creative) {
-      PALETTE.forEach((id, k) => {
-        main.append(this.slotEl(1000 + k, { id, count: 1 }, true, (e) => this.clickPalette(id, e), () => blockDef(id).name));
+      CREATIVE_PALETTE.forEach((id, k) => {
+        main.append(this.slotEl(1000 + k, { id, count: 1 }, true, (e) => this.clickPalette(id, e), () => itemName(id)));
       });
     } else {
       for (let i = HOTBAR_SIZE; i < INVENTORY_SIZE; i++) {
@@ -636,7 +723,9 @@ export class UI {
       if (i === inv.selected) el.classList.add('active');
       bar.append(el);
     }
-    this.invPanel.append(
+    const left = h(
+      'div',
+      { class: 'inv-left' },
       h('h2', {}, creative ? 'Creative inventory' : 'Inventory'),
       main,
       h('div', { class: 'inv-sep' }),
@@ -651,7 +740,64 @@ export class UI {
         'Press E or Esc to close.',
       ),
     );
+    this.invPanel.append(left, this.renderCrafting(inv));
     this.renderCursor();
+  }
+
+  private renderCrafting(inv: Inventory): HTMLElement {
+    const st = this.stations;
+    const where = st.has('furnace') && st.has('table') ? 'Crafting table + furnace' : st.has('furnace') ? 'Furnace' : st.has('table') ? 'Crafting table' : 'By hand';
+    const list = h('div', { class: 'recipes' });
+    const order: Record<Station, number> = { hand: 0, table: 1, furnace: 2 };
+    const recipes = [...RECIPES].sort((a, b) => {
+      const ca = inv.canCraft(a, st) ? 0 : 1;
+      const cb = inv.canCraft(b, st) ? 0 : 1;
+      return ca - cb || order[a.station] - order[b.station];
+    });
+    for (const r of recipes) list.append(this.recipeRow(inv, r));
+    return h(
+      'div',
+      { class: 'crafting' },
+      h('h2', {}, 'Crafting'),
+      h('p', { class: 'station' }, `Using: ${where}`),
+      list,
+      h('p', { class: 'inv-help' }, 'Place a crafting table or furnace and right-click it to unlock more recipes. Shift-click crafts as many as possible.'),
+    );
+  }
+
+  private recipeRow(inv: Inventory, r: Recipe): HTMLElement {
+    const ok = inv.canCraft(r, this.stations);
+    const needStation = !this.stations.has(r.station);
+    const ing = r.in.map(([id, n]) => {
+      const first = Array.isArray(id) ? id[0] : id;
+      const have = Array.isArray(id) ? Math.max(...id.map((x) => inv.count(x))) : inv.count(id);
+      return h(
+        'span',
+        { class: `ing ${inv.mode === 'survival' && have < n ? 'missing' : ''}`, title: itemName(first) },
+        h('img', { src: this.icons.get(first) ?? '', alt: itemName(first) }),
+        `×${n}`,
+      );
+    });
+    const row = h(
+      'button',
+      {
+        class: `recipe ${ok ? '' : 'locked'}`,
+        disabled: !ok,
+        title: needStation ? `Needs a ${r.station === 'table' ? 'crafting table' : 'furnace'}` : '',
+        onclick: (e: MouseEvent) => {
+          let n = 0;
+          const times = e.shiftKey ? 64 : 1;
+          while (n < times && inv.craft(r, this.stations)) n++;
+          if (n > 0) this.cb.onCraft?.();
+          else this.toast('Not enough room in your inventory', 1400);
+          this.renderInventory();
+        },
+      },
+      h('span', { class: 'out' }, h('img', { src: this.icons.get(r.out) ?? '', alt: '' }), r.count > 1 ? h('b', {}, String(r.count)) : null),
+      h('span', { class: 'rname' }, itemName(r.out), h('small', {}, needStation ? (r.station === 'table' ? 'crafting table' : 'furnace') : '')),
+      h('span', { class: 'ings' }, ...ing),
+    );
+    return row;
   }
 
   private renderCursor(): void {
