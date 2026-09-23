@@ -100,16 +100,27 @@ export class PostFX {
           float d = texture2D(tDepth, vUv).x;
           if (d >= 0.99999) { gl_FragColor = vec4(1.0); return; }
           vec3 p = viewPos(vUv);
+          // Beyond the AO range, skip reconstruction entirely: mixing a broken
+          // normal with white later cannot remove NaNs on some GPU drivers.
+          if (-p.z >= 90.0) { gl_FragColor = vec4(1.0); return; }
           vec3 pl = viewPos(vUv - vec2(uTexel.x, 0.0));
           vec3 pr = viewPos(vUv + vec2(uTexel.x, 0.0));
           vec3 pd = viewPos(vUv - vec2(0.0, uTexel.y));
           vec3 pu = viewPos(vUv + vec2(0.0, uTexel.y));
           vec3 ddx = abs(pr.z - p.z) < abs(p.z - pl.z) ? pr - p : p - pl;
           vec3 ddy = abs(pu.z - p.z) < abs(p.z - pd.z) ? pu - p : p - pd;
-          vec3 n = normalize(cross(ddx, ddy));
+          vec3 rawN = cross(ddx, ddy);
+          float normalLength2 = dot(rawN, rawN);
+          if (!(normalLength2 > 1e-12)) { gl_FragColor = vec4(1.0); return; }
+          vec3 n = rawN * inversesqrt(normalLength2);
           float ang = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) * 6.2831853;
           vec3 rv = vec3(cos(ang), sin(ang), 0.0);
-          vec3 t = normalize(rv - n * dot(rv, n));
+          vec3 tangent = rv - n * dot(rv, n);
+          if (dot(tangent, tangent) < 1e-6) {
+            vec3 axis = abs(n.z) < 0.9 ? vec3(0.0, 0.0, 1.0) : vec3(0.0, 1.0, 0.0);
+            tangent = cross(axis, n);
+          }
+          vec3 t = normalize(tangent);
           vec3 b = cross(n, t);
           mat3 tbn = mat3(t, b, n);
           float radius = uRadius;
@@ -117,8 +128,10 @@ export class PostFX {
           for (int i = 0; i < SAMPLES; i++) {
             vec3 sp = p + tbn * uKernel[i] * radius;
             vec4 clip = uProj * vec4(sp, 1.0);
+            if (clip.w <= 0.0) continue;
             vec2 suv = clip.xy / clip.w * 0.5 + 0.5;
             if (suv.x < 0.0 || suv.y < 0.0 || suv.x > 1.0 || suv.y > 1.0) continue;
+            if (texture2D(tDepth, suv).x >= 0.99999) continue;
             float sz = viewPos(suv).z;
             float range = smoothstep(0.0, 1.0, radius / max(abs(p.z - sz), 1e-4));
             occ += (sz >= sp.z + 0.025 ? 1.0 : 0.0) * range;
@@ -431,3 +444,4 @@ export class PostFX {
     this.quad.dispose();
   }
 }
+
