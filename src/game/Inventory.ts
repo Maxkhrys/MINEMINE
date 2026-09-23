@@ -155,7 +155,7 @@ export class Inventory {
       }
     }
     if (this.mode === 'creative') {
-      this.slots[this.selected] = { id, count: maxStackOf(id) };
+      this.slots[this.selected] = { id, count: maxStackOf(id), ...(durabilityOf(id)?{dur:durabilityOf(id)}:{}) };
       this.changed();
       return true;
     }

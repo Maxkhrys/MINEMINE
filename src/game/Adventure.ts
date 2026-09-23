@@ -190,16 +190,16 @@ export class Adventure {
     for(let dx=-4;dx<=4;dx++)for(let dz=-4;dz<=4;dz++)for(let dy=-1;dy<=0;dy++) if(isWater(this.world.getBlock(x+dx,y+dy,z+dz)))return true;
     return false;
   }
-  update(dt:number, x:number,y:number,z:number, active:boolean): void {
-    if(active)this.data.clock+=dt;
+  update(dt:number, x:number,y:number,z:number, active:boolean,timerDt=dt): void {
+    if(active)this.data.clock+=timerDt;
     for(const [key,c] of Object.entries(this.data.containers)) if(c.kind==='furnace') {
       const [fx,fy,fz]=keyPosition(key); if(!this.world.isLoadedAt(fx,fz)||!isFurnace(this.world.getBlock(fx,fy,fz)))continue;
       const before=c.slots[2]?.count??0;
-      if(tickFurnace(c,dt))this.revision++;
+      if(tickFurnace(c,timerDt))this.revision++;
       const produced=(c.slots[2]?.count??0)-before; if(produced>0)this.stat('smelted',produced);
       const block=c.burn>0?B.FURNACE_LIT:B.FURNACE; if(this.world.getBlock(fx,fy,fz)!==block)this.world.setBlock(fx,fy,fz,block);
     }
-    this.cropTimer+=dt;
+    this.cropTimer+=timerDt;
     if(this.cropTimer>=1) {
       const elapsed=this.cropTimer; this.cropTimer=0;
       for(const [key,time] of Object.entries(this.data.crops)) {

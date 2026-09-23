@@ -7,12 +7,12 @@ export class AdventureUI {
   readonly screen=h('div',{class:'adventure-screen hidden'});
   readonly status=h('div',{class:'adventure-status hidden','aria-live':'polite'});
   kind:AdventurePanel='journal'; container:Container|null=null; village:Village|undefined;
-  private inv!:Inventory; private timer=0; private revision=-1; private fuelSlot=0; private lastFocus:Element|null=null;
+  private inv!:Inventory; private timer=0; private revision=-1; private fuelSlot=0; private furnaceKey=''; private lastFocus:Element|null=null;
   get open():boolean{return !this.screen.classList.contains('hidden');}
   constructor(root:HTMLElement,readonly adventure:Adventure,private icons:Map<number,string>,private close:()=>void,private notice:(s:string)=>void,private rescue:(v:Village)=>void){root.append(this.screen,this.status);this.screen.addEventListener('contextmenu',e=>e.preventDefault());this.screen.addEventListener('keydown',e=>{if(e.key!=='Tab')return;const focus=[...this.screen.querySelectorAll<HTMLElement>('button:not(:disabled),input')];const i=focus.indexOf(document.activeElement as HTMLElement);e.preventDefault();focus[(i+(e.shiftKey?-1:1)+focus.length)%focus.length]?.focus();});}
   show(kind:AdventurePanel,inv:Inventory,c?:Container,v?:Village):void{this.kind=kind;this.inv=inv;this.container=c??null;this.village=v;this.lastFocus=document.activeElement;this.screen.classList.remove('hidden');this.render();this.screen.querySelector<HTMLElement>('button')?.focus();}
   hide():void{this.screen.classList.add('hidden');(this.lastFocus as HTMLElement)?.focus?.();}
-  update(dt:number):void{if(!this.open)return;this.timer-=dt;if(this.timer<=0){this.timer=.15;this.refreshMeters();if(this.revision!==this.adventure.revision){const active=document.activeElement as HTMLElement;const key=active?.dataset.focus;this.render();if(key)this.screen.querySelector<HTMLElement>(`[data-focus="${key}"]`)?.focus();}}}
+  update(dt:number):void{if(!this.open)return;this.timer-=dt;if(this.timer<=0){this.timer=.15;this.refreshMeters();if(this.revision!==this.adventure.revision){if(this.kind==='furnace'&&JSON.stringify(this.container?.slots)===this.furnaceKey){this.revision=this.adventure.revision;return;}const active=document.activeElement as HTMLElement;const key=active?.dataset.focus;this.render();if(key)this.screen.querySelector<HTMLElement>(`[data-focus="${key}"]`)?.focus();}}}
   private changed():void{this.adventure.revision++;this.inv.changed();this.render();}
   private slot(s:Stack|null,index:number,source:'inventory'|'storage'|'equipment',label?:string):HTMLElement{
     const click=(e:MouseEvent)=>{e.preventDefault();const n=e.button===2?1:Infinity;
@@ -33,7 +33,7 @@ export class AdventureUI {
   private grid(slots:(Stack|null)[],source:'inventory'|'storage'):HTMLElement{return h('div',{class:'adventure-grid'},slots.map((s,i)=>this.slot(s,i,source)));}
   private refreshMeters():void{const c=this.container;if(this.kind!=='furnace'||!c)return;const recipe=furnaceRecipe(c);const p=this.screen.querySelector<HTMLProgressElement>('#smelt-progress');if(p)p.value=c.progress/(recipe?.seconds??5);const b=this.screen.querySelector<HTMLProgressElement>('#fuel-progress');if(b)b.value=c.burn/Math.max(1,c.burnTotal);const label=this.screen.querySelector('#furnace-status');if(label)label.textContent=c.burn>0?`Fire burning · ${Math.ceil(c.burn)}s fuel left`:recipe?'Add fuel to light the furnace':'Add raw food, ore or a log';}
   render():void{
-    this.revision=this.adventure.revision;
+    this.revision=this.adventure.revision;this.furnaceKey=JSON.stringify(this.container?.slots);
     const titles={chest:'Chest',furnace:'Furnace',grave:'Recovery backpack',backpack:'Travel backpack',equipment:'Equipment',journal:'Adventure journal',trade:this.village?.name??'Village trader'};
     const body=h('div',{class:'adventure-body'});
     const title=h('header',{class:'inventory-header'},h('div',{},h('div',{class:'eyebrow'},`MINEMINE / DAY ${this.adventure.day} · ${this.adventure.phase.toUpperCase()}`),h('h2',{},titles[this.kind])),h('button',{'aria-label':'Close panel',class:'close-button','data-focus':'close',onclick:this.close},'×'));

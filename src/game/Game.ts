@@ -71,6 +71,7 @@ export class Game {
   private lastPosSave = 0;
   private saveWarned = false;
   private time = 0;
+  private elapsed=0;
   private last = performance.now();
   private debug = false;
   private debugTimer = 0;
@@ -387,7 +388,8 @@ export class Game {
 
   private frame = (now: number): void => {
     requestAnimationFrame(this.frame);
-    const dt = Math.min(0.1, Math.max(0, (now - this.last) / 1000));
+    this.elapsed=Math.min(1,Math.max(0,(now-this.last)/1000));
+    const dt = Math.min(0.1, this.elapsed);
     this.last = now;
     this.time += dt;
     try {
@@ -440,7 +442,7 @@ export class Game {
     }
 
     if(this.state==='playing'||this.state==='inventory'){
-      this.adventure.update(dt,this.player.x,this.player.y,this.player.z,this.state==='playing');
+      this.adventure.update(dt,this.player.x,this.player.y,this.player.z,this.state==='playing',this.elapsed);
       if(this.state==='playing')for(const stack of this.adventure.pickup(this.inventory,this.player.x,this.player.y,this.player.z))this.ui.showPickup(stack.id,stack.count);
       if(this.adventureRevision!==this.adventure.revision){this.saveDirty=true;this.adventureRevision=this.adventure.revision;}
       this.adventureUI.update(dt);
@@ -727,9 +729,10 @@ export class Game {
   }
 
   private updateItemUse(dt:number):void{
+    dt=this.elapsed||dt;
     const stack=this.inventory.selectedStack,input=this.input;
     const wasBlocking=this.blocking;
-    this.blocking=!!this.adventure.data.equipment.shield&&input.keys.has('KeyR')&&!input.leftDown;
+    this.blocking=!!this.adventure.data.equipment.shield&&input.keys.has('KeyR')&&!input.leftDown&&!input.rightDown;
     this.blockTime=this.blocking?(wasBlocking?this.blockTime+dt:0):0;
     this.renderer.held.use=this.blocking?'block':'none';
     if(this.eating>0){

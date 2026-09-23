@@ -287,8 +287,10 @@ export class MobManager {
   }
   startRescue(v:Village):void{
     if(!this.adventure||this.adventure.data.rescue)return;
-    const x=v.x+24,z=v.z+24,col=this.world.getColumn(x>>4,z>>4);if(!col)return;
-    const y=col.heightmap[((z&15)<<4)|(x&15)]+1;
+    let x=v.x+24,z=v.z+24,y=0;
+    for(let i=0;i<24;i++){const angle=i*2.399;x=Math.floor(v.x+Math.cos(angle)*30);z=Math.floor(v.z+Math.sin(angle)*30);const col=this.world.getColumn(x>>4,z>>4);if(!col)continue;
+      const h=col.heightmap[((z&15)<<4)|(x&15)];if(!isWater(this.world.getBlock(x,h+1,z))&&!IS_SOLID[this.world.getBlock(x,h+1,z)]&&!IS_SOLID[this.world.getBlock(x,h+2,z)]){y=h+1;break;}}
+    if(!y)return;
     this.adventure.data.rescue={village:v,x:x+.5,y,z:z+.5,following:false,complete:false};
     const m=this.spawn('villager',x+.5,y,z+.5);m.role='scout';m.home={x:m.x,y,z:m.z};this.adventure.revision++;
   }

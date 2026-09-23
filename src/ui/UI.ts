@@ -161,7 +161,7 @@ export class UI {
         h('h1', { class: 'death-title' }, 'You died'),
         h('p', { class: 'status death-cause' }, ''),
         h('div', { class: 'stack' }, h('button', { class: 'primary', id: 'respawn-btn', onclick: () => this.cb.onRespawn?.() }, 'Respawn')),
-        h('p', { class: 'status' }, 'You keep your inventory and return to the world spawn.'),
+        h('p', { class: 'status' }, 'Return to your bed or world spawn.'),
       ),
     );
 
@@ -330,7 +330,7 @@ export class UI {
   }
 
   showDeath(cause: string,info='Your inventory is safe.'): void {
-    (this.deathEl.querySelector('.status') as HTMLElement).textContent=info;
+    (this.deathEl.querySelector('.status:not(.death-cause)') as HTMLElement).textContent=info;
     (this.deathEl.querySelector('.death-cause') as HTMLElement).textContent = cause;
     this.deathEl.classList.remove('hidden');
   }
