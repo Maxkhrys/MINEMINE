@@ -122,6 +122,7 @@ export class Game {
     this.renderer.held.itemSprite = (id) => sprites.get(id) ?? null;
 
     this.ui = new UI(uiRoot, icons, this.settings, caps.postSupported, {
+      onCloseInventory: () => this.closeInventory(),
       onCraft: () => this.sfx.craft(),
       onRespawn: () => this.respawn(),
       onPlay: () => this.requestPlay(),
@@ -254,10 +255,11 @@ export class Game {
         health: this.health,
         food: this.food,
       },
-      inventory: this.inventory.serialize(),
+      inventory: this.inventory.serialize(this.ui.carriedStack),
       edits: editsToRecord(this.world.edits),
     };
     const ok = writeSave(data);
+    this.ui.setSaved(ok);
     this.saveDirty = false;
     this.lastSave = this.time;
     if (!ok && !this.saveWarned) {
@@ -282,6 +284,7 @@ export class Game {
   }
 
   private enterPlaying(): void {
+    if (this.ui.inventoryOpen && !this.ui.closeInventory()) { this.input.exitLock(); return; }
     if (this.titleSpin !== 0) {
       this.player.yaw += this.titleSpin;
       this.titleSpin = 0;
@@ -289,13 +292,13 @@ export class Game {
     this.state = 'playing';
     this.titleMode = false;
     this.ui.hideMenu();
-    if (this.ui.inventoryOpen) this.ui.closeInventory();
     this.ui.setHudVisible(!this.cinematic);
     this.ui.setCrosshairVisible(true);
     this.mining = null;
   }
 
   private pause(): void {
+    if (this.ui.inventoryOpen && !this.ui.closeInventory()) return;
     this.state = 'menu';
     this.mining = null;
     this.ui.showMenu('pause', this.worldInfo());
@@ -334,7 +337,7 @@ export class Game {
   }
 
   private closeInventory(): void {
-    this.ui.closeInventory();
+    if (!this.ui.closeInventory()) return;
     this.ui.setCrosshairVisible(true);
     if (this.input.forceLocked) {
       this.enterPlaying();
@@ -417,6 +420,13 @@ export class Game {
     const m = this.mining;
     const t = this.target;
     const progress = m && t && m.x === t.x && m.y === t.y && m.z === t.z ? m.progress : 0;
+    let targetHint = '';
+    if (t) {
+      const def = blockDef(t.id), harvest = this.harvestInfo(t.id);
+      targetHint = t.id === B.CRAFTING_TABLE || t.id === B.FURNACE ? 'Right-click to open workshop' : !Number.isFinite(def.hardness) ? 'Unbreakable' : this.mode === 'creative' ? 'Left: break · Right: place' : !harvest.canDrop ? `${['', 'Wooden', 'Stone', 'Iron', 'Diamond'][def.minTier]} ${def.tool ?? 'tool'} required to collect` : def.tool ? `${def.tool[0].toUpperCase() + def.tool.slice(1)} ${harvest.correct ? 'equipped' : 'recommended'}` : 'Mine by hand';
+    }
+    this.ui.setTarget(this.state === 'playing' && !this.mobTarget ? t?.id ?? 0 : 0, targetHint, progress);
+    this.ui.setNavigation(this.player.x, this.player.y, this.player.z, this.player.yaw);
     const showOutline = !this.cinematic && t && (this.state === 'playing' || this.state === 'inventory');
     this.renderer.selection.update(t?.x ?? 0, t?.y ?? 0, t?.z ?? 0, showOutline ? t.id : 0, t?.t ?? 0, progress);
 
@@ -596,6 +606,7 @@ export class Game {
     const input = this.input;
 
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
+    if (input.leftPressed || input.leftDown) this.renderer.held.triggerSwing();
     if (input.leftPressed && this.mobTarget) {
       this.attack(this.mobTarget);
       this.mining = null;
@@ -686,7 +697,11 @@ export class Game {
     if (mob.health <= 0 && !mob.dead) {
       mob.dead = true;
       if (this.mode === 'survival') {
-        for (const [id, n] of mob.rollDrops()) if (n > 0 && this.inventory.add(id, n) > 0) this.ui.toast('Inventory full', 1200);
+        for (const [id, n] of mob.rollDrops()) if (n > 0) {
+          const left = this.inventory.add(id, n);
+          if (n > left) this.ui.showPickup(id, n - left);
+          if (left) this.ui.toast('Inventory full', 1200);
+        }
       }
     }
   }
@@ -729,6 +744,7 @@ export class Game {
   private collect(id: number): void {
     if (this.mode !== 'survival' || !id) return;
     if (this.inventory.add(id, 1) > 0) this.ui.toast('Inventory full', 1200);
+    else this.ui.showPickup(id, 1);
   }
 
   /** Places the selected block against the face of `this.target` hit by the ray. */
@@ -954,4 +970,3 @@ export class Game {
     return lines.join('\n');
   }
 }
-
