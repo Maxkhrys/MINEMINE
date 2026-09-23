@@ -27,6 +27,33 @@ assert.equal(await page.evaluate(()=>window.__minemine.renderer.shaderError),fal
 assert.equal(await page.evaluate(()=>window.__minemine.renderer.postFailed),false,'Post effects render');
 assert.equal(errors.length,0,errors.join('\n'));
 console.log(JSON.stringify({errors, state:await page.evaluate(()=>({shaderError:window.__minemine.renderer.shaderError,columns:window.__minemine.world.columns.size,seed:window.__minemine.seedText}))}));
+// Exercise the real AO shader against distant and degenerate depth surfaces.
+const aoChecks = await page.evaluate(async () => {
+  const THREE = await import('/node_modules/three/build/three.module.js');
+  const { PostFX } = await import('/src/render/PostFX.ts');
+  const post = new PostFX(); post.setSize(128, 64);
+  const r = window.__minemine.renderer.renderer;
+  const camera = new THREE.PerspectiveCamera(70, 2, 0.1, 500);
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x99bbdd);
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), new THREE.MeshBasicMaterial({color: 0x99bbdd}));
+  mesh.position.z = -120; scene.add(mesh);
+  post.options.bloom = false;
+  const results = [];
+  for (const msaa of [false, true]) {
+    post.options.msaa = msaa;
+    post.render(r, scene, camera, 0, false);
+    const pixels = new Uint8Array(post.aoRT.width * post.aoRT.height * 4);
+    r.readRenderTargetPixels(post.aoRT, 0, 0, post.aoRT.width, post.aoRT.height, pixels);
+    let min = 255;
+    for (let i = 0; i < pixels.length; i += 4) min = Math.min(min, pixels[i]);
+    results.push({msaa, min});
+  }
+  mesh.geometry.dispose(); mesh.material.dispose(); post.dispose();
+  return results;
+});
+assert.ok(aoChecks.every(check => check.min === 255), 'Distant surfaces must have no black AO pixels: ' + JSON.stringify(aoChecks));
+console.log('PASS: distant shading with MSAA on and off', JSON.stringify(aoChecks));
 await browser.close();
 console.log('PASS: Hearthvale boot, viewpoint, clean HUD, daylight, golden hour, moonlight and shader compilation');
 })();

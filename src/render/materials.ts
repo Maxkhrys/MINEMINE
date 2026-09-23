@@ -66,8 +66,8 @@ vec3 skyGradient(vec3 dir) {
   float up = max(y, 0.0);
   vec3 col = mix(uSkyHorizon, uSkyZenith, pow(up, 0.6));
   // Brighter, slightly warmer band hugging the horizon.
-  col += vec3(0.10, 0.08, 0.05) * pow(1.0 - abs(y), 12.0);
-  col = mix(col, uSkyGround, smoothstep(0.0, -0.35, y));
+  col += vec3(0.10, 0.08, 0.05) * pow(max(1.0 - abs(y), 0.0), 12.0);
+  col = mix(col, uSkyGround, (1.0 - smoothstep(-0.35, 0.0, y)));
   float s = max(dot(dir, uSunDir), 0.0);
   // Mie-like forward scattering: a broad glow and a tighter halo around the sun.
   col += uSunColor * (0.16 * pow(s, 5.0) + 0.45 * pow(s, 60.0));
