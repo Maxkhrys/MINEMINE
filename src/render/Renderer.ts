@@ -226,7 +226,7 @@ export class GameRenderer {
     this.sun.updateMatrixWorld();
   }
 
-  render(time: number, underwater: boolean): void {
+  render(time: number, underwater: boolean, showHand = true): void {
     if (this.contextLost) return;
     this.env.uTime.value = time;
     this.env.uUnderwater.value = underwater ? 1 : 0;
@@ -248,7 +248,7 @@ export class GameRenderer {
       this.renderer.setRenderTarget(null);
       this.renderer.render(this.scene, this.camera);
     }
-    this.held.render(this.renderer);
+    if (showHand) this.held.render(this.renderer);
   }
 
   get shadowDistance(): number {

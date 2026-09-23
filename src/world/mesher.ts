@@ -198,7 +198,20 @@ export class SectionMesher {
     const baseY = sy * SECTION_SIZE - 1;
     this.baseY = baseY;
 
+    // Fast path: a section without any blocks has no faces.
+    const own = cols[4].blocks;
+    const start = sy * SECTION_SIZE * 256;
+    let any = false;
+    for (let i = start, end = start + SECTION_SIZE * 256; i < end; i++) {
+      if (own[i] !== B.AIR) {
+        any = true;
+        break;
+      }
+    }
+    if (!any) return { solid: null, cutout: null, water: null };
+
     // Padded copy of blocks: one block of margin on every side.
+    let seeThrough = 0;
     for (let pz = 0; pz < P; pz++) {
       const lz = pz - 1;
       const cz = lz < 0 ? 0 : lz >= CHUNK_SIZE ? 2 : 1;
@@ -210,10 +223,14 @@ export class SectionMesher {
         const llx = lx & CHUNK_MASK;
         for (let py = 0; py < P; py++) {
           const y = baseY + py;
-          pad[py * DY + pz * DZ + px] = y < 0 ? B.BEDROCK : y >= WORLD_HEIGHT ? B.AIR : blocks[columnIndex(llx, y, llz)];
+          const id = y < 0 ? B.BEDROCK : y >= WORLD_HEIGHT ? B.AIR : blocks[columnIndex(llx, y, llz)];
+          pad[py * DY + pz * DZ + px] = id;
+          seeThrough |= IS_OPAQUE[id] ^ 1;
         }
       }
     }
+    // Fast path: completely buried sections (everything opaque, shell included) have no faces.
+    if (!seeThrough) return { solid: null, cutout: null, water: null };
 
     // Padded heightmap with two blocks of margin (sky is averaged over a 3x3 area).
     for (let hz = 0; hz < PH; hz++) {

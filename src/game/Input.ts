@@ -82,7 +82,7 @@ export class Input {
   /** Keys the game uses are kept from scrolling the page or triggering browser shortcuts. */
   private captures(e: KeyboardEvent): boolean {
     if (e.code === 'F3') return true;
-    if (!this.locked) return false;
+    if (!this.locked || e.ctrlKey || e.metaKey || e.altKey) return false;
     return ['Space', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code) || e.code.startsWith('Digit') || e.code.startsWith('Key');
   }
 

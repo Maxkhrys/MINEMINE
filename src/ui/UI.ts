@@ -340,7 +340,7 @@ export class UI {
     input.addEventListener('keyup', (e) => e.stopPropagation());
     this.menuPanel.append(
       h('h2', {}, 'Create a new world'),
-      h('div', { class: 'stack' }, h('label', { class: 'field' }, 'World seed', input), h('label', { class: 'field' }, 'Game mode', seg), desc),
+      h('div', { class: 'stack' }, h('label', { class: 'field' }, 'World seed', input), h('div', { class: 'field label-like', role: 'group', 'aria-labelledby': 'mode-label' }, h('span', { id: 'mode-label' }, 'Game mode'), seg), desc),
       h('p', { class: 'note' }, 'This replaces the current world and its saved changes.'),
       h('div', { class: 'footer' }, h('button', { onclick: () => this.go('main') }, 'Cancel'), h('button', { class: 'primary', onclick: create }, 'Create world')),
     );

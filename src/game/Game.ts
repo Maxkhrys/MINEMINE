@@ -678,7 +678,7 @@ export class Game {
     const cam = this.renderer.camera;
     const underwater = this.world.getBlock(Math.floor(cam.position.x), Math.floor(cam.position.y), Math.floor(cam.position.z)) === B.WATER;
     this.renderer.particles.update(dt);
-    this.renderer.render(this.time, underwater);
+    this.renderer.render(this.time, underwater, this.state === 'playing');
     this.ui.setUnderwater(underwater && !this.renderer.postActive);
     this.ui.setBadge(this.mode, this.player.flying);
     this.ui.setHintVisible(this.state === 'playing' && this.playTime < 14);

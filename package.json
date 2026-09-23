@@ -8,13 +8,15 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "verify": "node e2e/verify.cjs"
   },
   "dependencies": {
     "three": "^0.186.0"
   },
   "devDependencies": {
     "@types/three": "^0.186.0",
+    "playwright": "^1.56.1",
     "typescript": "~5.9",
     "vite": "^7.3.6",
     "vitest": "^5.0.1"

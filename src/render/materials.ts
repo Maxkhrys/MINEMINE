@@ -37,7 +37,7 @@ export function createEnvUniforms(): EnvUniforms {
     uFogDensity: { value: 0.004 },
     uUnderwater: { value: 0 },
     uWaterFog: { value: new THREE.Color(0.03, 0.14, 0.22) },
-    uCaveAmbient: { value: 0.12 },
+    uCaveAmbient: { value: 0.17 },
     uEmissive: { value: 2.2 },
     uBlockTex: { value: null },
     uClouds: { value: 1 },
@@ -338,7 +338,7 @@ export function createWaterMaterial(env: EnvUniforms): THREE.MeshLambertMaterial
           float spec = pow(max(dot(N, H), 0.0), 260.0) * 5.0 + pow(max(dot(N, H), 0.0), 40.0) * 0.08;
           vec3 col = mix(outgoingLight, refl, fres) + uSunColor * spec * sunVis;
           float shallow = 1.0 - smoothstep(0.0, 1.6, vDepth);
-          if (top) {
+          if (top && gl_FrontFacing) {
             // Shore foam where the averaged depth approaches zero.
             float foamN = sin(vWorldPos.x * 3.1 + uTime * 0.8) * sin(vWorldPos.z * 2.7 - uTime * 0.6);
             float foam = (1.0 - smoothstep(0.1, 0.55, vDepth)) * (0.55 + 0.45 * foamN);

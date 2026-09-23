@@ -447,13 +447,24 @@ function makeCrackStages(): THREE.DataTexture[] {
   for (let s = 0; s < STAGES; s++) {
     const data = new Uint8Array(16 * 16 * 4);
     const n = Math.ceil(((s + 1) / STAGES) * order.length);
+    const crackAt = new Set(order.slice(0, n).map(([x, y]) => y * 16 + x));
     for (let i = 0; i < n; i++) {
       const [x, y] = order[i];
       const o = ((15 - y) * 16 + x) * 4;
-      data[o] = 20;
-      data[o + 1] = 16;
-      data[o + 2] = 14;
-      data[o + 3] = 200;
+      data[o] = 16;
+      data[o + 1] = 13;
+      data[o + 2] = 12;
+      data[o + 3] = 225;
+      // A light chipped edge below-right of each crack pixel keeps it readable on dark blocks.
+      const hx = x + 1;
+      const hy = y + 1;
+      if (hx < 16 && hy < 16 && !crackAt.has(hy * 16 + hx)) {
+        const h = ((15 - hy) * 16 + hx) * 4;
+        data[h] = 235;
+        data[h + 1] = 235;
+        data[h + 2] = 225;
+        data[h + 3] = 80;
+      }
     }
     const tex = new THREE.DataTexture(data, 16, 16, THREE.RGBAFormat);
     tex.magFilter = THREE.NearestFilter;

@@ -453,7 +453,8 @@ button.small {
   cursor: not-allowed;
 }
 
-label.field {
+label.field,
+.field.label-like {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -546,6 +547,14 @@ input[type='text'] {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+.panel.wide .footer {
+  position: sticky;
+  bottom: -22px;
+  margin: 16px -26px -22px;
+  padding: 14px 26px 18px;
+  background: linear-gradient(180deg, rgba(12, 17, 26, 0), rgba(12, 17, 26, 0.96) 35%);
 }
 
 .progress {
