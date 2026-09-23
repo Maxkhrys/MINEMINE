@@ -5,6 +5,7 @@ import { PRESETS, type Preset, type Settings } from '../game/settings';
 import { clear, h } from './dom';
 
 export interface UICallbacks {
+  onAdventure?(kind:'backpack'|'equipment'|'journal'|'furnace'):void;
   onPlay(): void;
   onCloseInventory(): void;
   onNewWorld(seedText: string, mode: GameMode): void;
@@ -40,6 +41,8 @@ const CONTROLS: [string, string][] = [
   ['Middle click', 'Pick the targeted block'],
   ['<kbd>1</kbd>–<kbd>9</kbd> / wheel', 'Select hotbar slot'],
   ['<kbd>E</kbd>', 'Open / close inventory'],
+  ['<kbd>B</kbd> / <kbd>O</kbd> / <kbd>J</kbd>', 'Backpack / equipment / adventure journal'],
+  ['<kbd>R</kbd> / <kbd>Q</kbd>', 'Hold shield / drop one item'],
   ['<kbd>F</kbd> or double <kbd>Space</kbd>', 'Toggle flying (Creative)'],
   ['<kbd>F3</kbd>', 'Debug overlay'],
   ['<kbd>Esc</kbd>', 'Release the mouse / pause'],
@@ -326,7 +329,8 @@ export class UI {
     this.hurtEl.classList.add('on');
   }
 
-  showDeath(cause: string): void {
+  showDeath(cause: string,info='Your inventory is safe.'): void {
+    (this.deathEl.querySelector('.status') as HTMLElement).textContent=info;
     (this.deathEl.querySelector('.death-cause') as HTMLElement).textContent = cause;
     this.deathEl.classList.remove('hidden');
   }
@@ -850,6 +854,7 @@ export class UI {
       h('p', { class: 'inv-help' }, creative ? 'Click to pick up · Shift-click to add to hotbar' : 'Click to move · Right-click to split · Shift-click to transfer', h('br'), 'Hover + 1–9 to swap · E / Esc to return'),
     );
     this.invPanel.append(
+      h('nav',{class:'adventure-nav'},...(['backpack','equipment','journal'] as const).map(k=>h('button',{onclick:()=>this.cb.onAdventure?.(k)},k[0].toUpperCase()+k.slice(1)))),
       h('header', { class: 'inventory-header' }, h('div', {}, h('div', { class: 'eyebrow' }, 'MINEMINE / YOUR WORKSHOP'), h('h2', {}, creative ? 'Creative workshop' : 'Inventory & crafting')), h('button', { class: 'close-button', 'aria-label': 'Close inventory', onclick: () => this.cb.onCloseInventory() }, '×')),
       h('div', { class: 'inventory-body' }, left, this.renderCrafting(inv)),
     );
@@ -896,7 +901,7 @@ export class UI {
     const tool = toolOf(r.out);
     if (tool) {
       const material = ingredients[0].id, stick = I.STICK;
-      const shape: Record<string, number[]> = { pickaxe: [0,1,2], axe: [0,1,3], shovel: [1], sword: [1,4] };
+      const shape: Record<string, number[]> = { pickaxe: [0,1,2], axe: [0,1,3], shovel: [1], sword: [1,4], hoe:[0,1] };
       for (const at of shape[tool.kind]) cells[at] = { id: material, count: 1 };
       cells[7] = { id: stick, count: 1 }; if (tool.kind !== 'sword') cells[4] = { id: stick, count: 1 };
     } else if (r.station === 'furnace') {
@@ -910,9 +915,10 @@ export class UI {
     for (const stack of cells) { const el = h('div', { class: 'slot', title: stack ? itemName(stack.id) : '' }); this.fillSlot(el, stack, false); grid.append(el); }
     const output = h('div', { class: 'slot craft-output' }); this.fillSlot(output, { id: r.out, count: r.count }, false);
     const craft = (batch: boolean) => {
+      if(r.station==='furnace'){this.cb.onAdventure?.('furnace');return;}
       if (this.cursor) return;
       let n = 0; while (n < (batch ? 64 : 1) && inv.craft(r, this.stations)) n++;
-      if (n) { this.cb.onCraft?.(); this.showPickup(r.out, n * r.count); this.toast(`${r.station === 'furnace' ? 'Smelted' : 'Crafted'} ${n * r.count} × ${itemName(r.out)}`, 1800); }
+      if (n) { this.cb.onCraft?.(); this.showPickup(r.out, n * r.count); this.toast(`Crafted ${n * r.count} × ${itemName(r.out)}`, 1800); }
       else this.toast('No room. Free a slot before crafting.', 1800);
       this.renderInventory();
     };
@@ -920,8 +926,8 @@ export class UI {
       h('div', { class: 'section-heading' }, h('h3', {}, itemName(r.out)), h('span', {}, `Makes ${r.count}`)),
       h('div', { class: 'craft-preview' }, grid, h('span', { class: 'craft-arrow', 'aria-hidden': 'true' }, '→'), output),
       h('div', { class: 'ingredient-list' }, ...ingredients.map(ing => h('div', { class: `ingredient ${inv.mode === 'survival' && ing.have < ing.count ? 'missing' : ''}` }, h('img', { src: this.icons.get(ing.id) ?? '', alt: '' }), h('span', {}, itemName(ing.id)), h('b', {}, inv.mode === 'creative' ? `∞ / ${ing.count}` : `${ing.have} / ${ing.count}`)))),
-      h('p', { class: `craft-status ${needStation ? 'missing' : ''}` }, this.cursor ? 'Place your held stack before crafting.' : needStation ? `Place a ${r.station === 'table' ? 'crafting table' : 'furnace'} nearby to use this recipe.` : !ok ? 'Gather the missing ingredients shown above.' : 'Ingredients come from your backpack and hotbar.'),
-      h('div', { class: 'row craft-actions' }, h('button', { class: 'primary', id: 'craft-one', disabled: !ok, onclick: (e: MouseEvent) => craft(e.shiftKey) }, r.station === 'furnace' ? 'Smelt' : 'Craft'), h('button', { id: 'craft-max', disabled: !ok, title: 'Up to 64 crafts, limited by ingredients and space', onclick: () => craft(true) }, 'Craft max')),
+      h('p', { class: `craft-status ${needStation ? 'missing' : ''}` }, r.station==='furnace' ? 'Use a placed furnace: add input and fuel, wait for smelting, then collect the output.' : this.cursor ? 'Place your held stack before crafting.' : needStation ? `Place a ${r.station === 'table' ? 'crafting table' : 'furnace'} nearby to use this recipe.` : !ok ? 'Gather the missing ingredients shown above.' : 'Ingredients come from your backpack and hotbar.'),
+      h('div', { class: 'row craft-actions' }, h('button', { class: 'primary', id: 'craft-one', disabled: r.station==='furnace' ? needStation : !ok, onclick: (e: MouseEvent) => craft(e.shiftKey) }, r.station === 'furnace' ? 'Open furnace' : 'Craft'), h('button', { id: 'craft-max', disabled: !ok, title: 'Up to 64 crafts, limited by ingredients and space', onclick: () => craft(true) }, 'Craft max')),
     );
   }
 

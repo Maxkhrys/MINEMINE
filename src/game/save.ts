@@ -1,3 +1,5 @@
+import type { AdventureData } from './Adventure';
+import type { MobSave } from './Mobs';
 import type { SpawnPoint } from '../world/generator';
 import type { GameMode } from './Inventory';
 
@@ -14,6 +16,8 @@ export interface PlayerSave {
 
 export interface SaveData {
   version: 1;
+  adventure?:AdventureData;
+  animals?:MobSave[];
   seed: number;
   seedText: string;
   mode: GameMode;
@@ -77,3 +81,4 @@ export function recordToEdits(rec: Record<string, number[]>): Map<number, Map<nu
   }
   return out;
 }
+

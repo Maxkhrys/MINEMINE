@@ -149,6 +149,18 @@ export class GameRenderer {
     this.setSunDirection(new THREE.Vector3(0.52, gold ? 0.22 : 0.64, 0.56));
   }
 
+  private cycleColor=new THREE.Color();
+  setDayTime(clock:number):void{
+    const t=(clock%1200)/1200,alt=Math.sin((t-.07)*Math.PI*2),day=THREE.MathUtils.smoothstep(alt,-.22,.25),dusk=(1-Math.min(1,Math.abs(alt)*4))*day;
+    this.sun.intensity=.28+day*2.22;this.hemi.intensity=.48+day*1.32;
+    this.sun.color.set(0x91b6ff).lerp(this.cycleColor.set(0xfff1dc),day).lerp(this.cycleColor.set(0xffae70),dusk*.65);
+    this.env.uSunColor.value.copy(this.sun.color).multiplyScalar(.12+day*.88);
+    this.env.uSkyZenith.value.set(0x09152f).lerp(this.cycleColor.set(0x518cce),day);
+    this.env.uSkyHorizon.value.set(0x253650).lerp(this.cycleColor.set(0xb5d4e7),day).lerp(this.cycleColor.set(0xeab18c),dusk*.7);
+    this.env.uSkyGround.value.set(0x182234).lerp(this.cycleColor.set(0x778899),day);
+    this.env.uSunDir.value.set(.52,Math.max(.18,Math.abs(alt)),.56).normalize();
+  }
+
   setSunDirection(dir: THREE.Vector3): void {
     this.env.uSunDir.value.copy(dir).normalize();
   }

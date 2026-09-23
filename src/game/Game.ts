@@ -3,7 +3,10 @@ import { Sfx } from '../audio/Sfx';
 import { GameRenderer } from '../render/Renderer';
 import { WorldEffects } from '../render/WorldEffects';
 import { UI } from '../ui/UI';
-import { B, isWater, IS_REPLACEABLE, IS_SOLID, IS_TARGETABLE, blockDef, canSupportPlant } from '../world/blocks';
+import { AdventureUI, type AdventurePanel } from '../ui/AdventureUI';
+import { Adventure, type Village } from './Adventure';
+import { AdventureEffects } from '../render/AdventureEffects';
+import { B, isWater, IS_REPLACEABLE, IS_SOLID, IS_TARGETABLE, blockDef, canSupportPlant, isFurnace, isCrop, isDoor, doorBottom, isGate, isBed } from '../world/blocks';
 import { ChunkManager } from '../world/ChunkManager';
 import { CHUNK_SIZE, WORLD_HEIGHT } from '../world/constants';
 import { TerrainGenerator, type SpawnPoint } from '../world/generator';
@@ -13,7 +16,7 @@ import { World } from '../world/World';
 import { WorldPhysics } from '../world/Physics';
 import { SHOWCASE_NAME, SHOWCASE_SEED } from '../world/showcase';
 import { Input } from './Input';
-import { I, ITEMS, TIER_SPEED, attackDamage, drawItemIcon, foodOf, isBlockItem, itemName, toolOf, type Station } from './items';
+import { I, ITEMS, TIER_SPEED, attackDamage, drawItemIcon, foodOf, isBlockItem, itemName, toolOf, durabilityOf, type Station } from './items';
 import { MobManager, type Mob } from './Mobs';
 import { Inventory, type GameMode } from './Inventory';
 import { EYE_HEIGHT, Player } from './Player';
@@ -32,6 +35,12 @@ const MAX_AIR = 10;
 export class Game {
   readonly renderer: GameRenderer;
   readonly world = new World();
+  readonly adventure=new Adventure(this.world);
+  readonly adventureUI:AdventureUI;
+  readonly adventureEffects:AdventureEffects;
+  private adventureRevision=0;
+  private eating=0;private eatingId=0;private bowCharge=0;private blockTime=0;private blocking=false;
+  private pendingRespawn=false;
   readonly chunks: ChunkManager;
   readonly player: Player;
   readonly input: Input;
@@ -123,6 +132,7 @@ export class Game {
 
     this.ui = new UI(uiRoot, icons, this.settings, caps.postSupported, {
       onCloseInventory: () => this.closeInventory(),
+      onAdventure:kind=>this.openAdventure(kind),
       onCraft: () => this.sfx.craft(),
       onRespawn: () => this.respawn(),
       onPlay: () => this.requestPlay(),
@@ -134,6 +144,12 @@ export class Game {
         this.sfx.click();
       },
     });
+    this.adventureUI=new AdventureUI(uiRoot,this.adventure,icons,()=>this.closeInventory(),text=>this.ui.toast(text),v=>{this.mobs.startRescue(v);this.ui.toast('Scout marked in your journal. Right-click them to begin the escort.');});
+    this.adventureEffects=new AdventureEffects(this.world,this.adventure,icons,this.renderer.scene);
+    this.adventure.onSpill=(stack,x,y,z)=>this.adventure.drop(stack,x,y,z);
+    this.mobs.adventure=this.adventure;
+    this.mobs.onAttack=(n,m)=>this.combatDamage(n,m.x,m.z);
+    this.mobs.onShoot=(m,x,y,z)=>{const dx=x-m.x,dz=z-m.z,dist=Math.hypot(dx,dz),speed=19;this.adventureEffects.shoot(m.x,m.eyeY,m.z,dx,y-m.eyeY+4.5*(dist/speed)**2,dz,speed,4,true);this.sfx.dig('wood');};
     this.ui.setFps(this.settings.showFps ? '' : null);
 
     this.input.onLockChange((locked) => {
@@ -182,8 +198,10 @@ export class Game {
     this.input.exitLock();
     this.chunks.unloadAll();
     this.world.clear();
+    this.adventure.reset(save?.adventure,!!save&&!save.adventure);
+    this.adventureUI.hide();this.adventureEffects.clear();this.eating=this.bowCharge=0;this.pendingRespawn=false;
     this.renderer.particles.clear();
-    this.mobs.clear();
+    this.mobs.clear();this.mobs.restore(save?.animals);
     this.ui.hideDeath();
     this.physics.clear();
     this.effects.clear();
@@ -256,6 +274,7 @@ export class Game {
         food: this.food,
       },
       inventory: this.inventory.serialize(this.ui.carriedStack),
+      adventure:this.adventure.data,animals:this.mobs.serialize(),
       edits: editsToRecord(this.world.edits),
     };
     const ok = writeSave(data);
@@ -289,6 +308,7 @@ export class Game {
       this.player.yaw += this.titleSpin;
       this.titleSpin = 0;
     }
+    this.adventureUI.hide();
     this.state = 'playing';
     this.titleMode = false;
     this.ui.hideMenu();
@@ -299,6 +319,7 @@ export class Game {
 
   private pause(): void {
     if (this.ui.inventoryOpen && !this.ui.closeInventory()) return;
+    this.adventureUI.hide();this.eating=this.bowCharge=0;this.renderer.held.use='none';
     this.state = 'menu';
     this.mining = null;
     this.ui.showMenu('pause', this.worldInfo());
@@ -321,7 +342,7 @@ export class Game {
         for (let x = px - 4; x <= px + 4; x++) {
           const b = this.world.getBlock(x, y, z);
           if (b === B.CRAFTING_TABLE) st.add('table');
-          else if (b === B.FURNACE) st.add('furnace');
+          else if (isFurnace(b)) st.add('furnace');
         }
       }
     }
@@ -329,6 +350,7 @@ export class Game {
   }
 
   private openInventory(): void {
+    this.adventureUI.hide();
     this.state = 'inventory';
     this.mining = null;
     this.ui.setCrosshairVisible(false);
@@ -337,7 +359,10 @@ export class Game {
   }
 
   private closeInventory(): void {
-    if (!this.ui.closeInventory()) return;
+    if (this.ui.inventoryOpen && !this.ui.closeInventory()) return;
+    this.adventureUI.hide();this.saveDirty=true;
+    const grave=this.adventure.data.grave;
+    if(grave){const key=`${grave.x},${grave.y},${grave.z}`,c=this.adventure.data.containers[key];if(c&&c.slots.every(s=>!s)){this.world.setBlock(grave.x,grave.y,grave.z,B.AIR);delete this.adventure.data.containers[key];this.adventure.data.grave=null;this.chunks.flushUrgent();}}
     this.ui.setCrosshairVisible(true);
     if (this.input.forceLocked) {
       this.enterPlaying();
@@ -407,12 +432,22 @@ export class Game {
     if (this.state === 'playing' && this.physics.update(dt, (x, y, z) => this.player.intersectsBlock(x, y, z))) {
       this.saveDirty = true;
     }
-    if (this.state === 'playing' || this.state === 'inventory' || this.state === 'dead') {
+    if (this.state === 'playing') {
+      this.mobs.night=this.adventure.night;this.mobs.survival=this.mode==='survival';this.mobs.playerY=this.player.y;
       for (const m of this.mobs.update(dt, this.player.x, this.player.z)) {
         if (Math.hypot(m.x - this.player.x, m.z - this.player.z) < 16) this.sfx.mob(m.kind);
       }
     }
 
+    if(this.state==='playing'||this.state==='inventory'){
+      this.adventure.update(dt,this.player.x,this.player.y,this.player.z,this.state==='playing');
+      if(this.state==='playing')for(const stack of this.adventure.pickup(this.inventory,this.player.x,this.player.y,this.player.z))this.ui.showPickup(stack.id,stack.count);
+      if(this.adventureRevision!==this.adventure.revision){this.saveDirty=true;this.adventureRevision=this.adventure.revision;}
+      this.adventureUI.update(dt);
+    }
+    if(this.pendingRespawn&&this.world.isLoadedAt(Math.floor(this.player.x),Math.floor(this.player.z))){this.player.resolveStuck();this.player.peakY=this.player.y;this.pendingRespawn=false;}
+    this.adventureEffects.update(this.state==='playing'?dt:0,this.player,this.mobs,(m,n)=>this.hurtMob(m,n),(n,x,z)=>this.combatDamage(n,x,z));
+    if(this.mode==='survival')this.renderer.setDayTime(this.adventure.data.clock);
     if (this.state === 'loading') this.updateLoading();
 
     this.updateTarget();
@@ -423,7 +458,7 @@ export class Game {
     let targetHint = '';
     if (t) {
       const def = blockDef(t.id), harvest = this.harvestInfo(t.id);
-      targetHint = t.id === B.CRAFTING_TABLE || t.id === B.FURNACE ? 'Right-click to open workshop' : !Number.isFinite(def.hardness) ? 'Unbreakable' : this.mode === 'creative' ? 'Left: break · Right: place' : !harvest.canDrop ? `${['', 'Wooden', 'Stone', 'Iron', 'Diamond'][def.minTier]} ${def.tool ?? 'tool'} required to collect` : def.tool ? `${def.tool[0].toUpperCase() + def.tool.slice(1)} ${harvest.correct ? 'equipped' : 'recommended'}` : 'Mine by hand';
+      targetHint = isFurnace(t.id)?'Right-click to smelt':t.id===B.CHEST||t.id===B.GRAVE?'Right-click for storage':isDoor(t.id)||isGate(t.id)?'Right-click to open / close':isBed(t.id)?'Right-click to sleep / set respawn':t.id===B.VILLAGE_POST?'Right-click for trades and requests':t.id===B.FARMLAND?'Plant seeds · water within 4 blocks':isCrop(t.id)?t.id===B.CROP_3?'Ripe wheat · right-click to harvest':'Growing · needs nearby water':t.id === B.CRAFTING_TABLE ? 'Right-click to open workshop' : !Number.isFinite(def.hardness) ? 'Unbreakable' : this.mode === 'creative' ? 'Left: break · Right: place' : !harvest.canDrop ? `${['', 'Wooden', 'Stone', 'Iron', 'Diamond'][def.minTier]} ${def.tool ?? 'tool'} required to collect` : def.tool ? `${def.tool[0].toUpperCase() + def.tool.slice(1)} ${harvest.correct ? 'equipped' : 'recommended'}` : 'Mine by hand';
     }
     this.ui.setTarget(this.state === 'playing' && !this.mobTarget ? t?.id ?? 0 : 0, targetHint, progress);
     this.ui.setNavigation(this.player.x, this.player.y, this.player.z, this.player.yaw);
@@ -543,6 +578,8 @@ export class Game {
       }
       for (let i = 1; i <= 9; i++) if (pressed.has(`Digit${i}`) || pressed.has(`Numpad${i}`)) this.inventory.select(i - 1);
       if (this.input.wheel !== 0) this.inventory.select(this.inventory.selected + this.input.wheel);
+      if(pressed.has('KeyB')||pressed.has('KeyO')||pressed.has('KeyJ')){this.openAdventure(pressed.has('KeyB')?'backpack':pressed.has('KeyO')?'equipment':'journal');return;}
+      if(pressed.has('KeyQ')){const stack=this.inventory.selectedStack;if(stack){this.adventure.drop({...stack,count:1},this.player.x-Math.sin(this.player.yaw),this.player.eyeY-.3,this.player.z-Math.cos(this.player.yaw),-Math.sin(this.player.yaw)*3,-Math.cos(this.player.yaw)*3);this.inventory.consumeSelected();}}
       if (pressed.has('KeyE')) {
         this.openInventory();
         return;
@@ -566,11 +603,11 @@ export class Game {
     } else if (this.state === 'dead') {
       if (pressed.has('Enter') || pressed.has('Space')) this.respawn();
     } else if (this.state === 'inventory') {
-      if (pressed.has('KeyE') || pressed.has('Escape')) {
+      if (pressed.has('KeyE') || pressed.has('Escape') || pressed.has('KeyB') || pressed.has('KeyO') || pressed.has('KeyJ')) {
         this.closeInventory();
         return;
       }
-      for (let i = 1; i <= 9; i++) if (pressed.has(`Digit${i}`)) this.ui.inventoryHotkey(i - 1);
+      if(this.ui.inventoryOpen)for (let i = 1; i <= 9; i++) if (pressed.has(`Digit${i}`)) this.ui.inventoryHotkey(i - 1);
     }
   }
 
@@ -607,7 +644,7 @@ export class Game {
 
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
     if (input.leftPressed || input.leftDown) this.renderer.held.triggerSwing();
-    if (input.leftPressed && this.mobTarget) {
+    if ((input.leftPressed || input.leftDown) && this.mobTarget) {
       this.attack(this.mobTarget);
       this.mining = null;
     } else if (input.leftPressed && this.target && this.breakTime(this.target.id) <= 0.2) {
@@ -640,10 +677,11 @@ export class Game {
       this.mining = null;
     }
 
+    this.updateItemUse(dt);
     if (input.rightPressed) {
       this.useItem();
       this.placeTimer = 0.3;
-    } else if (input.rightDown) {
+    } else if (input.rightDown && isBlockItem(this.inventory.selectedStack?.id??0)) {
       this.placeTimer -= dt;
       if (this.placeTimer <= 0) {
         this.placeOnTarget();
@@ -658,27 +696,97 @@ export class Game {
 
   /** Right click: eat, open a station, or place a block. */
   private useItem(): void {
-    const stack = this.inventory.selectedStack;
-    const shift = this.input.keys.has('ShiftLeft') || this.input.keys.has('ShiftRight');
-    const t = this.target;
-    if (t && !shift && (t.id === B.CRAFTING_TABLE || t.id === B.FURNACE)) {
-      this.openInventory();
-      return;
-    }
-    const food = foodOf(stack?.id);
-    if (food > 0) {
-      if (this.mode === 'creative' || this.food >= MAX_FOOD) {
-        this.ui.toast("You're not hungry", 1000);
-        return;
+    const stack=this.inventory.selectedStack,t=this.target,shift=this.input.keys.has('ShiftLeft')||this.input.keys.has('ShiftRight'),m=this.mobTarget;
+    if(m&&!shift){
+      if(m.kind==='villager'){
+        if(m.role==='scout'&&this.adventure.data.rescue&&!this.adventure.data.rescue.complete){this.adventure.data.rescue.following=true;this.ui.toast('Scout: Lead the way back to the village!');return;}
+        const v=this.adventure.nearestVillage(m.x,m.z);this.openAdventure('trade',undefined,v);return;
       }
-      this.food = Math.min(MAX_FOOD, this.food + food);
-      this.saturation = Math.min(this.food, this.saturation + food * 0.6);
-      this.inventory.consumeSelected();
-      this.sfx.eat();
-      this.renderer.held.triggerSwing();
-      return;
+      if(stack&&this.mobs.feed(m,stack.id)){this.inventory.consumeSelected();this.sfx.mob(m.kind);this.ui.toast('Find and feed a second adult nearby to breed.');return;}
     }
-    if (stack && isBlockItem(stack.id)) this.placeOnTarget();
+    if(t&&!m&&!shift){
+      if(isFurnace(t.id)){this.openAdventure('furnace',t);return;}
+      if(t.id===B.CHEST||t.id===B.GRAVE){this.openAdventure(t.id===B.GRAVE?'grave':'chest',t);return;}
+      if(t.id===B.CRAFTING_TABLE){this.openInventory();return;}
+      if(t.id===B.VILLAGE_POST){this.openAdventure('trade',undefined,this.adventure.nearestVillage(t.x,t.z));return;}
+      if(isDoor(t.id)||isGate(t.id)){this.toggleDoor(t);return;}
+      if(isBed(t.id)){this.sleepAt(t);return;}
+      if(t.id===B.CROP_3){this.harvestCrop(t.x,t.y,t.z);return;}
+    }
+    if(!stack)return;
+    if(stack.id===I.BUCKET){
+      const p=this.renderer.camera.position,d=this.camDir;const hit=raycastVoxels((x,y,z)=>isWater(this.world.getBlock(x,y,z))?B.DIRT:this.world.getBlock(x,y,z),p.x,p.y,p.z,d.x,d.y,d.z,REACH);
+      if(hit&&isWater(this.world.getBlock(hit.x,hit.y,hit.z))){this.world.setBlock(hit.x,hit.y,hit.z,B.AIR);this.inventory.slots[this.inventory.selected]={id:I.WATER_BUCKET,count:1};this.inventory.changed();this.afterEdit();this.sfx.splash();}return;
+    }
+    if(stack.id===I.WATER_BUCKET&&t){const x=t.x+t.nx,y=t.y+t.ny,z=t.z+t.nz;if(IS_REPLACEABLE[this.world.getBlock(x,y,z)]&&this.world.setBlock(x,y,z,B.WATER)){this.inventory.slots[this.inventory.selected]={id:I.BUCKET,count:1};this.inventory.changed();this.afterEdit();this.sfx.splash();}return;}
+    if(toolOf(stack.id)?.kind==='hoe'&&t&&(t.id===B.GRASS||t.id===B.DIRT)&&this.world.getBlock(t.x,t.y+1,t.z)===B.AIR){this.world.setBlock(t.x,t.y,t.z,B.FARMLAND);this.inventory.wearSelected();this.renderer.held.triggerSwing();this.afterEdit();return;}
+    if(stack.id===I.SEEDS&&t&&t.id===B.FARMLAND&&this.world.getBlock(t.x,t.y+1,t.z)===B.AIR){this.world.setBlock(t.x,t.y+1,t.z,B.CROP_0);this.inventory.consumeSelected();this.afterEdit();return;}
+    if(foodOf(stack.id)>0){if(this.food>=MAX_FOOD)this.ui.toast("You're not hungry",1000);else{this.eatingId=stack.id;this.eating=Math.max(.001,this.eating);}return;}
+    if(stack.id===I.BOW)return;
+    if(isBlockItem(stack.id))this.placeOnTarget();
+  }
+
+  private updateItemUse(dt:number):void{
+    const stack=this.inventory.selectedStack,input=this.input;
+    const wasBlocking=this.blocking;
+    this.blocking=!!this.adventure.data.equipment.shield&&input.keys.has('KeyR')&&!input.leftDown;
+    this.blockTime=this.blocking?(wasBlocking?this.blockTime+dt:0):0;
+    this.renderer.held.use=this.blocking?'block':'none';
+    if(this.eating>0){
+      if(!input.rightDown||input.leftDown||stack?.id!==this.eatingId||this.food>=MAX_FOOD){this.eating=0;}
+      else{this.eating+=dt;this.renderer.held.use='eat';this.renderer.held.useProgress=this.eating/1.25;
+        if(Math.floor(this.eating/.32)!==Math.floor((this.eating-dt)/.32))this.sfx.eat();
+        if(this.eating>=1.25){const food=foodOf(stack.id);this.food=Math.min(MAX_FOOD,this.food+food);this.saturation=Math.min(this.food,this.saturation+food*.6);this.inventory.consumeSelected();this.eating=0;this.saveDirty=true;}}
+    }
+    if(stack?.id===I.BOW&&!input.leftDown){
+      if(input.rightDown&&(this.mode==='creative'||this.inventory.count(I.ARROW)>0)){this.bowCharge=Math.min(1.2,this.bowCharge+dt);this.renderer.held.use='bow';this.renderer.held.useProgress=this.bowCharge/1.2;}
+      else if(this.bowCharge>.12){const p=this.renderer.camera.position,d=this.camDir;this.adventureEffects.shoot(p.x+d.x*.3,p.y+d.y*.3,p.z+d.z*.3,d.x,d.y,d.z,12+this.bowCharge*18,3+this.bowCharge*8);if(this.mode==='survival')this.inventory.remove(I.ARROW,1);this.inventory.wearSelected();this.inventory.changed();this.sfx.dig('wood');this.bowCharge=0;}
+      else if(!input.rightDown)this.bowCharge=0;
+      if(input.rightPressed&&this.mode==='survival'&&!this.inventory.count(I.ARROW))this.ui.toast('Craft arrows from a stone, stick and feather.');
+    }else this.bowCharge=0;
+  }
+
+  openAdventure(kind:AdventurePanel,t?:{x:number;y:number;z:number},v?:Village):void{
+    if(kind==='backpack'&&this.mode!=='creative'&&!this.inventory.count(I.BACKPACK)){this.ui.toast('Craft a backpack: 4 leather and 2 wheat at a table.');return;}
+    if(kind==='furnace'&&!t){const p=this.player;let best=Infinity;for(let y=Math.floor(p.y)-2;y<=p.y+3;y++)for(let z=Math.floor(p.z)-4;z<=p.z+4;z++)for(let x=Math.floor(p.x)-4;x<=p.x+4;x++)if(isFurnace(this.world.getBlock(x,y,z))){const dist=Math.hypot(x+.5-p.x,y+.5-p.eyeY,z+.5-p.z);if(dist<best&&dist<=REACH+1){best=dist;t={x,y,z};}}if(!t){this.ui.toast('Place a furnace nearby, then right-click it.');return;}}
+    if(this.ui.inventoryOpen&&!this.ui.closeInventory())return;
+    this.state='inventory';this.mining=null;this.eating=this.bowCharge=0;this.renderer.held.use='none';this.ui.setCrosshairVisible(false);
+    this.adventureUI.show(kind,this.inventory,t?this.adventure.container(t.x,t.y,t.z):undefined,v);this.input.exitLock();
+  }
+
+  private toggleDoor(t:RayHit):void{
+    if(isGate(t.id)){const base=t.id>=B.GATE_X?B.GATE_X:B.GATE;if(t.id!==base&&this.player.intersectsBlock(t.x,t.y,t.z))return;this.world.setBlock(t.x,t.y,t.z,t.id===base?base+1:base);}
+    else{const base=doorBottom(t.id),top=(t.id-base)%2===1,y=t.y-(top?1:0),open=t.id-base<2;
+      if(!open&&(this.player.intersectsBlock(t.x,y,t.z)||this.player.intersectsBlock(t.x,y+1,t.z)))return;
+      this.world.setBlock(t.x,y,t.z,base+(open?2:0));this.world.setBlock(t.x,y+1,t.z,base+(open?3:1));}
+    this.sfx.place('wood');this.renderer.held.triggerSwing();this.afterEdit();
+  }
+  private sleepAt(t:RayHit):void{
+    const y=t.y,z=t.z-(t.id===B.BED_FOOT?1:0);this.adventure.data.bed={x:t.x,y,z};this.saveDirty=true;
+    if(!this.adventure.night){this.ui.toast('Respawn point set. Sleep here at night.');return;}
+    if(this.mobs.mobs.some(m=>m.hostile&&!m.dead&&Math.hypot(m.x-t.x,m.z-t.z)<12)){this.ui.toast('Hostile creatures are too close to sleep.');return;}
+    this.adventure.data.clock=(Math.floor(this.adventure.data.clock/1200)+(this.adventure.data.clock%1200>=780?1:0))*1200+180;
+    this.ui.toast('A new day. Respawn point set.');this.sfx.craft();
+  }
+  private harvestCrop(x:number,y:number,z:number):void{
+    const ripe=this.world.getBlock(x,y,z)===B.CROP_3;this.world.setBlock(x,y,z,B.AIR);
+    if(this.mode==='survival'){this.adventure.drop({id:I.SEEDS,count:ripe?2:1},x+.5,y+.2,z+.5);if(ripe)this.adventure.drop({id:I.WHEAT,count:1},x+.5,y+.3,z+.5);}
+    if(ripe)this.adventure.stat('harvested');this.sfx.breakBlock('grass');this.renderer.held.triggerSwing();this.afterEdit();
+  }
+  private combatDamage(amount:number,x:number,z:number):void{
+    if(this.mode!=='survival'||this.state!=='playing'||this.invulnerable>0)return;
+    const dx=x-this.player.x,dz=z-this.player.z,len=Math.hypot(dx,dz)||1;
+    if(this.blocking&&(-Math.sin(this.player.yaw)*dx-Math.cos(this.player.yaw)*dz)/len>.15){
+      const shield=this.adventure.data.equipment.shield;if(shield){shield.dur=(shield.dur??durabilityOf(shield.id))-2;if(shield.dur<=0){this.adventure.data.equipment.shield=null;this.ui.toast('Your shield broke');}}
+      this.sfx.place('stone');this.adventure.revision++;
+      if(this.blockTime<.24){this.ui.toast('Parry!',700);this.invulnerable=.25;for(const m of this.mobs.mobs)if(m.hostile&&Math.hypot(m.x-x,m.z-z)<2)m.knockback(dx,dz,7);return;}amount*=.3;
+    }
+    amount*=1-this.adventure.protection;this.adventure.wearArmour();this.damage(amount,'You fell in battle');
+  }
+  private hurtMob(mob:Mob,damage:number):void{
+    if(mob.dead)return;mob.health-=damage;mob.hurtFlash=.25;mob.panic=mob.hostile?0:5;
+    mob.knockback(mob.x-this.player.x,mob.z-this.player.z,4);this.sfx.mob(mob.kind,true);
+    if(mob.health<=0){mob.dead=true;if(mob.hostile)this.adventure.stat('kills');if(this.mode==='survival')for(const [id,n]of mob.rollDrops())if(n>0)this.adventure.drop({id,count:n},mob.x,mob.y+.5,mob.z);}
   }
 
   private attack(mob: Mob): void {
@@ -686,24 +794,9 @@ export class Game {
     this.attackCooldown = 0.3;
     const held = this.inventory.selectedStack?.id;
     const dmg = this.mode === 'creative' ? 100 : attackDamage(held);
-    mob.health -= dmg;
-    mob.hurtFlash = 0.25;
-    mob.panic = 5;
-    mob.knockback(mob.x - this.player.x, mob.z - this.player.z, 6);
-    this.renderer.held.triggerSwing();
-    this.sfx.mob(mob.kind, true);
-    this.exhaustion += 0.1;
-    if (toolOf(held) && this.inventory.wearSelected()) this.ui.toast('Your tool broke', 1400);
-    if (mob.health <= 0 && !mob.dead) {
-      mob.dead = true;
-      if (this.mode === 'survival') {
-        for (const [id, n] of mob.rollDrops()) if (n > 0) {
-          const left = this.inventory.add(id, n);
-          if (n > left) this.ui.showPickup(id, n - left);
-          if (left) this.ui.toast('Inventory full', 1200);
-        }
-      }
-    }
+    this.hurtMob(mob,dmg);
+    this.renderer.held.triggerSwing();this.exhaustion+=.1;
+    if(toolOf(held)&&this.inventory.wearSelected())this.ui.toast('Your tool broke',1400);
   }
 
   /** Breaks exactly the block in `this.target` (the outlined one). */
@@ -717,10 +810,16 @@ export class Game {
       if (id === B.BEDROCK) this.ui.toast('Bedrock cannot be broken', 1200);
       return false;
     }
+    if(isCrop(id)){this.harvestCrop(x,y,z);return true;}
+    if(id===B.CHEST||isFurnace(id))this.adventure.container(x,y,z);
+    if(isDoor(id)){const base=doorBottom(id),otherY=y+((id-base)%2===1?-1:1);this.world.setBlock(x,otherY,z,B.AIR);}
+    if(isBed(id)){const otherZ=z+(id===B.BED?1:-1);if(isBed(this.world.getBlock(x,y,otherZ)))this.world.setBlock(x,y,otherZ,B.AIR);}
     const harvest = this.harvestInfo(id);
     if (!this.world.setBlock(x, y, z, B.AIR)) return false;
-    if (harvest.canDrop) this.collect(def.drop);
-    else if (this.mode === 'survival') this.ui.toast(def.minTier > 1 ? `${def.name} needs ${def.minTier >= 3 ? "an iron" : "a stone"} pickaxe or better` : `${def.name} needs a pickaxe to collect`, 1600);
+    if (harvest.canDrop) this.collect(isDoor(id)?B.DOOR:isBed(id)?B.BED:def.drop);
+    this.adventure.stat('mined');
+    if(id===B.TALL_GRASS&&Math.random()<.4)this.collect(I.SEEDS);
+    if (!harvest.canDrop && this.mode === 'survival') this.ui.toast(def.minTier > 1 ? `${def.name} needs ${def.minTier >= 3 ? "an iron" : "a stone"} pickaxe or better` : `${def.name} needs a pickaxe to collect`, 1600);
     if ((id === B.OAK_LEAVES || id === B.BIRCH_LEAVES) && Math.random() < 0.1) this.collect(I.APPLE);
     if (this.mode === 'survival') {
       this.exhaustion += 0.025;
@@ -743,15 +842,14 @@ export class Game {
 
   private collect(id: number): void {
     if (this.mode !== 'survival' || !id) return;
-    if (this.inventory.add(id, 1) > 0) this.ui.toast('Inventory full', 1200);
-    else this.ui.showPickup(id, 1);
+    const t=this.target;this.adventure.drop({id,count:1},t?t.x+.5:this.player.x,t?t.y+.5:this.player.y+.5,t?t.z+.5:this.player.z);
   }
 
   /** Places the selected block against the face of `this.target` hit by the ray. */
   placeOnTarget(): boolean {
     const t = this.target;
     const stack = this.inventory.selectedStack;
-    if (!t || !stack) return false;
+    if (!t || !stack || !isBlockItem(stack.id)) return false;
     const def = blockDef(stack.id);
     let tx: number;
     let ty: number;
@@ -775,7 +873,13 @@ export class Game {
     }
     // Never place a block inside the player's collision volume.
     if (this.player.intersectsBlock(tx, ty, tz)) return false;
-    if (!this.world.setBlock(tx, ty, tz, stack.id)) return false;
+    let placeId=stack.id;
+    if(stack.id===B.DOOR){if(!IS_REPLACEABLE[this.world.getBlock(tx,ty+1,tz)]||this.player.intersectsBlock(tx,ty+1,tz)||!IS_SOLID[this.world.getBlock(tx,ty-1,tz)])return false;placeId=Math.abs(Math.sin(this.player.yaw))>.7?B.DOOR_X:B.DOOR;this.world.setBlock(tx,ty+1,tz,placeId+1);}
+    if(stack.id===B.BED){if(!IS_REPLACEABLE[this.world.getBlock(tx,ty,tz+1)]||this.player.intersectsBlock(tx,ty,tz+1)||!IS_SOLID[this.world.getBlock(tx,ty-1,tz)]||!IS_SOLID[this.world.getBlock(tx,ty-1,tz+1)])return false;this.world.setBlock(tx,ty,tz+1,B.BED_FOOT);}
+    if(stack.id===B.GATE)placeId=Math.abs(Math.sin(this.player.yaw))>.7?B.GATE_X:B.GATE;
+    if(stack.id===B.LADDER){if(!t.nx&&!t.nz){this.ui.toast('Place ladders against a wall.');return false;}placeId=t.nx?B.LADDER_X:B.LADDER;}
+    if (!this.world.setBlock(tx, ty, tz, placeId)) return false;
+    if(stack.id===B.OAK_PLANKS){const v=this.adventure.nearestVillage(tx,tz);if(v&&Math.hypot(tx-v.x,tz-v.z)<32)this.adventure.stat('villageBuild');}
     this.inventory.consumeSelected();
     this.sfx.place(def.sound);
     this.renderer.held.triggerSwing();
@@ -867,7 +971,8 @@ export class Game {
     this.mining = null;
     if (this.ui.inventoryOpen) this.ui.closeInventory();
     this.ui.setCrosshairVisible(false);
-    this.ui.showDeath(cause);
+    this.adventureUI.hide();const grave=this.adventure.makeGrave(this.inventory,this.player.x,this.player.y,this.player.z);
+    this.ui.showDeath(cause,grave?'Your items are in a recovery backpack. Find its coordinates in the journal.':'Your inventory is safe. Return to your bed or world spawn.');
     this.input.exitLock();
     this.save();
   }
@@ -880,12 +985,11 @@ export class Game {
     this.exhaustion = 0;
     this.air = MAX_AIR;
     const p = this.player;
-    p.x = this.spawn.x;
-    p.y = this.spawn.y;
-    p.z = this.spawn.z;
+    const bed=this.adventure.data.bed;const validBed=bed&&(!this.world.isLoadedAt(bed.x,bed.z)||isBed(this.world.getBlock(bed.x,bed.y,bed.z)));const spawn=validBed?{x:bed.x+.5,y:bed.y+.6,z:bed.z+.5}:this.spawn;
+    p.x=spawn.x;p.y=spawn.y;p.z=spawn.z;
     p.vx = p.vy = p.vz = 0;
     p.lastFall = 0;
-    p.resolveStuck();
+    if(this.world.isLoadedAt(Math.floor(p.x),Math.floor(p.z)))p.resolveStuck();else this.pendingRespawn=true;
     p.peakY = p.y;
     this.ui.hideDeath();
     this.state = 'menu';
@@ -931,6 +1035,8 @@ export class Game {
     this.ui.setUnderwater(underwater && !this.renderer.postActive);
     this.ui.setBadge(this.mode, this.player.flying);
     this.ui.setVitals(this.mode === 'survival', this.health, this.food, this.air, MAX_AIR);
+    const action=this.eating>0?`Eating · ${Math.round(this.eating/1.25*100)}%`:this.bowCharge>0?`Draw · ${Math.round(this.bowCharge/1.2*100)}%`:this.blocking?'Shield raised':this.mobTarget?this.mobTarget.kind==='villager'?(this.mobTarget.role==='scout'?'Scout · right-click to escort':'Trader · right-click to talk'):`${this.mobTarget.baby>0?'Baby ':''}${this.mobTarget.kind} · ${Math.ceil(this.mobTarget.health)} HP`:`Day ${this.adventure.day} · ${this.adventure.phase} · J journal`;
+    this.adventureUI.status.textContent=action;this.adventureUI.status.classList.toggle('hidden',this.state!=='playing'||this.cinematic);
     this.ui.setHintVisible(this.state === 'playing' && this.playTime < 14);
 
     this.fpsFrames++;

@@ -61,6 +61,9 @@ export function buildShowcase(blocks: Uint8Array, cx: number, cz: number): void 
     set(x + 2, 75, z + 2, B.CAMPFIRE);
     set(x + 1, 61, z + 1, B.CRAFTING_TABLE);
     set(x + 2, 61, z + 1, B.FURNACE);
+    set(x+3,61,z+1,B.CHEST);
+    set(x+1,61,z+3,B.BED);set(x+1,61,z+4,B.BED_FOOT);
+    set(door,61,z+d-1,B.DOOR);set(door,62,z+d-1,B.DOOR_TOP);
     set(x + w - 2, 64, z + 1, B.GLOW_LAMP);
     box(x + w - 3, 61, z + 2, x + w - 2, 61, z + 4, B.OAK_PLANKS);
     for (let zz = z + d; zz <= z + d + 3; zz++) box(door, 60, zz, door + 1, 60, zz, B.COBBLESTONE);
@@ -146,4 +149,11 @@ export function buildShowcase(blocks: Uint8Array, cx: number, cz: number): void 
   }
   box(-40, 30, -21, -36, 30, -6, B.OAK_PLANKS);
   for (const z of [-9, -15, -21]) { set(-40, 31, z, B.GLOW_LAMP); set(-36, 31, z, B.GLOW_LAMP); }
+  set(0,61,4,B.VILLAGE_POST);
+  for(let z=30;z<=36;z++)for(let x=-17;x<=-11;x++){
+    set(x,60,z,x===-14?B.WATER:B.FARMLAND);set(x,61,z,x===-14?B.AIR:B.CROP_3);
+  }
+  set(-14,61,29,B.GATE);
+  for(let y=61;y<=67;y++)set(-6,y,-24,B.LADDER);
+
 }

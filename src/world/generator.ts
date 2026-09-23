@@ -1,3 +1,4 @@
+import { buildVillages } from './villages';
 import { B } from './blocks';
 import { SHOWCASE_SEED, buildShowcase } from './showcase';
 import { CHUNK_SIZE, COLUMN_VOLUME, SEA_LEVEL, WORLD_HEIGHT, columnIndex } from './constants';
@@ -353,6 +354,7 @@ export class TerrainGenerator {
       }
     }
 
+    buildVillages(blocks,cx,cz,this.seed,(x,z)=>this.heightAt(x,z));
     if (this.seed === SHOWCASE_SEED) buildShowcase(blocks, cx, cz);
     return blocks;
   }

@@ -33,9 +33,15 @@ export const I = {
   RAW_CHICKEN: 285,
   COOKED_CHICKEN: 286,
   BREAD: 287,
+  RAW_FISH: 288, COOKED_FISH: 289, SEEDS: 290, WHEAT: 291,
+  LEATHER: 292, FEATHER: 293, BONE: 294, EMERALD: 295,
+  BOW: 296, ARROW: 297, SHIELD: 298,
+  HELMET: 299, CHESTPLATE: 300, LEGGINGS: 301, BOOTS: 302,
+  BACKPACK: 303, WOOD_HOE: 304, BUCKET:305, WATER_BUCKET:306,
+
 } as const;
 
-export type ToolKind = 'pickaxe' | 'axe' | 'shovel' | 'sword';
+export type ToolKind = 'pickaxe' | 'axe' | 'shovel' | 'sword' | 'hoe';
 
 export interface ToolInfo {
   kind: ToolKind;
@@ -51,12 +57,16 @@ export interface ItemDef {
   tool?: ToolInfo;
   /** Hunger points restored when eaten. */
   food?: number;
+  durability?: number;
+  equipment?: 'head' | 'body' | 'legs' | 'feet' | 'shield';
+  protection?: number;
   /** Icon drawing, see drawItemIcon. */
   art: ItemArt;
 }
 
 type ItemArt =
   | { kind: 'tool'; tool: ToolKind; head: string; headDark: string }
+  | { kind: 'sprite'; shape: string; color: string }
   | { kind: 'stick' }
   | { kind: 'lump'; colors: string[] }
   | { kind: 'ingot'; colors: string[] }
@@ -75,7 +85,7 @@ const TIER_HEAD: [string, string][] = [
 ];
 
 function tool(id: number, kind: ToolKind, tier: number): void {
-  const label = { pickaxe: 'Pickaxe', axe: 'Axe', shovel: 'Shovel', sword: 'Sword' }[kind];
+  const label = { pickaxe: 'Pickaxe', axe: 'Axe', shovel: 'Shovel', sword: 'Sword', hoe: 'Hoe' }[kind];
   ITEMS.set(id, {
     id,
     name: `${TIER_NAME[tier]} ${label}`,
@@ -115,6 +125,36 @@ food(I.STEAK, 'Steak', 8, ['#8a5530', '#5f3a1f', '#c38c5c'], 'meat');
 food(I.RAW_CHICKEN, 'Raw Chicken', 2, ['#f6d7c3', '#e3b59a', '#fff3e8'], 'leg');
 food(I.COOKED_CHICKEN, 'Cooked Chicken', 6, ['#d99a5b', '#b0713a', '#f3d2a3'], 'leg');
 food(I.BREAD, 'Bread', 5, ['#d6a55a', '#b07b36', '#f0cf8e'], 'bread');
+
+const extra = (id: number, name: string, shape: string, color: string, info: Partial<ItemDef> = {}) => ITEMS.set(id, { id, name, maxStack: 64, art: { kind: 'sprite', shape, color }, ...info });
+extra(I.BUCKET,'Bucket','bucket','#a9bac0',{maxStack:1});
+extra(I.WATER_BUCKET,'Water Bucket','waterbucket','#a9bac0',{maxStack:1});
+extra(I.RAW_FISH, 'Raw Fish', 'fish', '#8dbaa7', { food: 2 });
+extra(I.COOKED_FISH, 'Cooked Fish', 'fish', '#d9a366', { food: 6 });
+extra(I.SEEDS, 'Wheat Seeds', 'seed', '#8dab55');
+extra(I.WHEAT, 'Wheat', 'wheat', '#e4c467');
+extra(I.LEATHER, 'Leather', 'leather', '#ad6f41');
+extra(I.FEATHER, 'Feather', 'feather', '#eee9d2');
+extra(I.BONE, 'Bone', 'bone', '#e8ddba');
+extra(I.EMERALD, 'Emerald', 'emerald', '#5ce19b');
+extra(I.BOW, 'Bow', 'bow', '#b18851', { maxStack: 1, durability: 240 });
+extra(I.ARROW, 'Arrow', 'arrow', '#c7b693');
+extra(I.SHIELD, 'Shield', 'shield', '#bd985e', { maxStack: 1, durability: 260, equipment: 'shield' });
+extra(I.HELMET, 'Iron Helmet', 'helmet', '#b5cbc9', { maxStack: 1, durability: 160, equipment: 'head', protection: .08 });
+extra(I.CHESTPLATE, 'Iron Chestplate', 'chestplate', '#b5cbc9', { maxStack: 1, durability: 240, equipment: 'body', protection: .20 });
+extra(I.LEGGINGS, 'Iron Leggings', 'leggings', '#b5cbc9', { maxStack: 1, durability: 220, equipment: 'legs', protection: .16 });
+extra(I.BOOTS, 'Iron Boots', 'boots', '#b5cbc9', { maxStack: 1, durability: 180, equipment: 'feet', protection: .08 });
+extra(I.BACKPACK, 'Backpack', 'backpack', '#849e5d', { maxStack: 1 });
+tool(I.WOOD_HOE, 'hoe', 1);
+
+export const durabilityOf = (id: number): number => toolOf(id)?.durability ?? ITEMS.get(id)?.durability ?? 0;
+export const equipmentOf = (id: number) => ITEMS.get(id)?.equipment;
+export function fuelTime(id: number): number {
+  if (id === I.COAL) return 80;
+  if ([B.OAK_LOG,B.BIRCH_LOG,B.OAK_PLANKS].includes(id as never)) return 15;
+  if (id === I.STICK) return 5;
+  return 0;
+}
 
 export function isBlockItem(id: number): boolean {
   return id > 0 && id < 256;
@@ -199,8 +239,30 @@ export const RECIPES: Recipe[] = [
   { out: I.COOKED_PORK, count: 1, in: [[I.RAW_PORK, 1], [I.COAL, 1]], station: 'furnace' },
   { out: I.STEAK, count: 1, in: [[I.RAW_BEEF, 1], [I.COAL, 1]], station: 'furnace' },
   { out: I.COOKED_CHICKEN, count: 1, in: [[I.RAW_CHICKEN, 1], [I.COAL, 1]], station: 'furnace' },
-  { out: I.BREAD, count: 1, in: [[B.TALL_GRASS, 6]], station: 'furnace' },
+  { out: I.BREAD, count: 1, in: [[I.WHEAT, 3]], station: 'hand' },
+  {out:I.BUCKET,count:1,in:[[I.IRON_INGOT,3]],station:'table'},
+  { out: I.COOKED_FISH, count: 1, in: [[I.RAW_FISH, 1], [I.COAL, 1]], station: 'furnace' },
+  { out: I.COAL, count: 1, in: [[LOGS, 1]], station: 'furnace' },
+  { out: B.CHEST, count: 1, in: [[B.OAK_PLANKS, 8]], station: 'table' },
+  { out: B.BED, count: 1, in: [[B.OAK_PLANKS, 3],[I.WHEAT,3]], station: 'table' },
+  { out: B.DOOR, count: 2, in: [[B.OAK_PLANKS, 6]], station: 'table' },
+  { out: B.GATE, count: 1, in: [[B.OAK_PLANKS, 2],[I.STICK,4]], station: 'table' },
+  { out: B.LADDER, count: 3, in: [[I.STICK, 7]], station: 'table' },
+  { out: I.WOOD_HOE, count: 1, in: [[B.OAK_PLANKS,2],[I.STICK,2]], station: 'table' },
+  { out: I.BOW, count: 1, in: [[I.STICK,3],[I.LEATHER,2]], station: 'table' },
+  { out: I.ARROW, count: 4, in: [[B.COBBLESTONE,1],[I.STICK,1],[I.FEATHER,1]], station: 'hand' },
+  { out: I.SHIELD, count: 1, in: [[B.OAK_PLANKS,6],[I.IRON_INGOT,1]], station: 'table' },
+  { out: I.HELMET, count: 1, in: [[I.IRON_INGOT,5]], station: 'table' },
+  { out: I.CHESTPLATE, count: 1, in: [[I.IRON_INGOT,8]], station: 'table' },
+  { out: I.LEGGINGS, count: 1, in: [[I.IRON_INGOT,7]], station: 'table' },
+  { out: I.BOOTS, count: 1, in: [[I.IRON_INGOT,4]], station: 'table' },
+  { out: I.BACKPACK, count: 1, in: [[I.LEATHER,4],[I.WHEAT,2]], station: 'table' },
 ];
+
+export const SMELTING = RECIPES.filter(r => r.station === 'furnace').flatMap(r => {
+  const [input, amount] = r.in[0];
+  return (Array.isArray(input) ? input : [input]).map(id => ({ input: id, amount, output: r.out, count: r.count, seconds: 5 }));
+});
 
 // ---------------------------------------------------------------- icons
 
@@ -231,7 +293,46 @@ export function drawItemIcon(def: ItemDef): { url: string; canvas: HTMLCanvasEle
     rect(5,27,2,2,'#dbc084');
   };
   const a = def.art;
-  if (a.kind === 'tool') {
+  if (a.kind === 'sprite') {
+    const color = a.color, dark = '#344138', light = '#f0ebd2';
+    if(a.shape==='bucket'||a.shape==='waterbucket'){rect(6,10,20,4,'#58666b');rect(7,14,18,10,a.color);rect(9,24,14,3,'#58666b');rect(9,11,14,4,a.shape==='waterbucket'?'#4797cb':'#374b53');rect(9,16,3,7,'#dbe6e9');}
+    else if (a.shape === 'fish') {
+      poly([[3,13],[8,8],[19,8],[24,12],[29,7],[29,23],[24,19],[17,23],[8,21],[3,17]],dark);
+      poly([[5,13],[9,10],[19,10],[25,15],[27,11],[27,20],[23,17],[17,21],[9,19],[5,16]],color);
+      rect(7,12,3,3,light);rect(8,12,2,2,dark);poly([[13,10],[16,4],[19,10]],color);rect(13,15,7,2,light);
+    } else if (a.shape === 'bow') {
+      poly([[7,2],[17,5],[24,12],[25,18],[20,25],[8,30],[10,25],[16,22],[20,16],[17,10],[11,7]],dark);
+      poly([[9,4],[16,7],[22,13],[23,18],[19,23],[10,27],[16,23],[21,17],[18,10]],color);
+      for(let y=5;y<28;y++)rect(9,y,1,1,light);
+    } else if (a.shape === 'arrow' || a.shape === 'feather' || a.shape === 'bone') {
+      poly([[4,27],[7,28],[27,6],[25,3]],dark);
+      for(let i=0;i<22;i++)rect(5+i,26-i,2,2,color);
+      if(a.shape==='arrow'){poly([[21,3],[30,1],[28,10]],'#b4c9c5');poly([[4,21],[10,25],[4,29],[1,25]],light);}
+      if(a.shape==='feather'){poly([[7,23],[10,11],[23,3],[29,4],[25,17],[11,26]],color);for(let i=0;i<6;i++)rect(12+i*2,16-i*2,6,1,'#b4bda6');}
+      if(a.shape==='bone'){rect(22,2,7,6,color);rect(3,23,7,6,color);}
+    } else if (a.shape === 'seed' || a.shape === 'wheat') {
+      for(const [x,y] of [[8,8],[15,4],[22,9]]){rect(x,y,2,21-y,'#688344');for(let j=0;j<3;j++){rect(x-3,y+j*4,3,3,color);rect(x+2,y+j*4+1,3,3,color);}}
+    } else if (a.shape === 'emerald') {
+      poly([[11,2],[22,2],[28,9],[28,22],[21,29],[10,29],[4,22],[4,9]],dark);
+      poly([[12,4],[21,4],[25,10],[25,21],[20,26],[11,26],[7,21],[7,10]],color);poly([[12,5],[19,5],[13,11],[9,21],[8,10]],light);
+    } else if (a.shape === 'shield') {
+      poly([[4,3],[28,3],[27,20],[21,27],[16,31],[10,28],[5,20]],dark);
+      poly([[6,5],[26,5],[25,19],[20,25],[16,28],[8,20]],color);rect(14,6,4,19,'#e4d1a0');rect(7,11,18,4,'#a6b4a1');
+    } else if (a.shape === 'helmet') {
+      poly([[7,5],[25,5],[29,11],[29,25],[21,25],[21,16],[11,16],[11,25],[3,25],[3,11]],dark);
+      poly([[8,7],[24,7],[27,12],[27,23],[23,23],[23,14],[9,14],[9,23],[5,23],[5,12]],color);rect(9,8,14,2,light);
+    } else if (a.shape === 'chestplate') {
+      poly([[4,4],[11,4],[13,9],[19,9],[21,4],[28,4],[31,14],[25,17],[25,29],[7,29],[7,17],[1,14]],dark);
+      poly([[5,6],[10,6],[12,11],[20,11],[22,6],[27,6],[28,13],[23,15],[23,27],[9,27],[9,15],[4,13]],color);rect(11,14,10,3,light);
+    } else if (a.shape === 'leggings' || a.shape === 'boots') {
+      rect(5,4,22,25,dark);rect(7,6,18,21,color);rect(14,14,4,17,'#000000');ctx.clearRect(14,16,4,16);if(a.shape==='boots'){ctx.clearRect(0,0,32,10);rect(3,25,10,4,color);rect(19,25,10,4,color);}else rect(7,7,18,3,light);
+    } else if (a.shape === 'backpack') {
+      rect(9,3,14,7,dark);rect(5,8,23,21,dark);rect(7,10,19,17,color);rect(10,18,13,8,'#637747');rect(14,12,4,8,'#e8d8a4');rect(11,5,10,3,color);
+    } else {
+      poly([[8,3],[14,6],[22,3],[28,10],[24,17],[28,25],[20,29],[14,25],[5,28],[3,20],[8,14],[3,9]],dark);
+      poly([[9,6],[14,9],[22,6],[25,10],[21,17],[25,24],[20,26],[14,22],[7,25],[6,20],[11,14],[6,9]],color);
+    }
+  } else if (a.kind === 'tool') {
     const H = a.head, D = a.headDark;
     const outline = def.tool!.tier === 4 ? '#163f48' : '#34322e';
     const shine = ['', '#dec18b', '#c4c8c5', '#fafff0', '#dcfff5'][def.tool!.tier];
@@ -255,6 +356,9 @@ export function drawItemIcon(def: ItemDef): { url: string; canvas: HTMLCanvasEle
       poly([[22,4],[27,4],[28,8],[24,14],[21,14],[18,11],[18,8]],H);
       poly([[27,5],[28,8],[24,14],[22,14],[24,10]],D);
       poly([[22,4],[26,4],[22,6],[19,9],[18,8]],shine);
+    } else if (a.tool === 'hoe') {
+      poly([[12,3],[24,3],[26,6],[21,10],[18,8],[11,8],[8,11],[7,7]],outline);
+      poly([[12,5],[23,5],[21,8],[18,6],[12,6],[9,9],[9,7]],H);
     } else {
       poly([[25,2],[30,2],[30,7],[15,22],[11,18]],outline);
       poly([[26,4],[28,4],[28,7],[14,20],[13,18]],H);

@@ -298,17 +298,17 @@ export class SectionMesher {
       const face = FACES[f];
       const ni = i + face.nOff;
       const n = pad[ni];
-      if (IS_OPAQUE[n]) continue;
+      if (IS_OPAQUE[n] && def.opaque) continue;
       if (kind === 2 && n === id) continue;
       let flags = 0;
       if (def.wind) flags |= FLAG_LEAVES;
       if (def.tint && (id !== B.GRASS || f === 2)) flags |= FLAG_TINT;
       if (def.emissive) flags |= FLAG_EMISSIVE;
-      this.emitFace(builder, face, ni, lx, ly, lz, def.faces[f], flags);
+      this.emitFace(builder, face, ni, lx, ly, lz, def.faces[f], flags, def.box);
     }
   }
 
-  private emitFace(builder: Builder, face: FaceDef, ni: number, lx: number, ly: number, lz: number, layer: number, flags: number): void {
+  private emitFace(builder: Builder, face: FaceDef, ni: number, lx: number, ly: number, lz: number, layer: number, flags: number, box: number[] = [0,0,0,1,1,1]): void {
     const pad = this.pad;
     builder.ensureQuad();
     const ao = [0, 0, 0, 0];
@@ -346,7 +346,7 @@ export class SectionMesher {
         skyN2++;
       }
       const p = face.corners[c];
-      builder.vertex(lx + p[0], ly + p[1], lz + p[2], nx, ny, nz, cu * 255, cv * 255, layer, a * 85, Math.round((skySum / skyN2) * 255), flags);
+      builder.vertex(lx + box[0] + p[0]*(box[3]-box[0]), ly + box[1] + p[1]*(box[4]-box[1]), lz + box[2] + p[2]*(box[5]-box[2]), nx, ny, nz, cu * 255, cv * 255, layer, a * 85, Math.round((skySum / skyN2) * 255), flags);
     }
     builder.quad(ao[0] + ao[2] > ao[1] + ao[3]);
   }
