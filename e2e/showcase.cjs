@@ -18,9 +18,13 @@ await page.locator('.hud').waitFor({state:'hidden'});
 await page.waitForTimeout(12000);
 fs.mkdirSync('e2e/screenshots',{recursive:true});
 await page.screenshot({path:'e2e/screenshots/hearthvale-day.png'});
+console.log('RENDER_IMAGE village-day '+(await page.screenshot({type:'jpeg',quality:55})).toString('base64'));
+
 assert.equal(await page.locator('.hud').isVisible(),false,'F1 hides HUD');
 await page.keyboard.press('KeyL'); await page.waitForTimeout(2000);
 await page.screenshot({path:'e2e/screenshots/hearthvale-golden.png'});
+console.log('RENDER_IMAGE village-golden '+(await page.screenshot({type:'jpeg',quality:55})).toString('base64'));
+
 await page.keyboard.press('KeyL'); await page.waitForTimeout(2000);
 await page.screenshot({path:'e2e/screenshots/hearthvale-night.png'});
 assert.equal(await page.evaluate(()=>window.__minemine.renderer.shaderError),false,'Shaders compile');

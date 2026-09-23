@@ -53,7 +53,7 @@ export class PostFX {
   private width = 1;
   private height = 1;
   options: PostOptions = { ssao: true, bloom: true, msaa: true };
-  exposure = 1.08;
+  exposure = 1.04;
 
   constructor() {
     const depthTexture = new THREE.DepthTexture(1, 1);
@@ -270,8 +270,8 @@ export class PostFX {
         tBloom: { value: this.bloomRTs[0].texture },
         uUseAO: { value: 1 },
         uUseBloom: { value: 1 },
-        uAOStrength: { value: 0.75 },
-        uBloomStrength: { value: 0.16 },
+        uAOStrength: { value: 0.5 },
+        uBloomStrength: { value: 0.1 },
         uExposure: { value: 1 },
         uUnderwater: { value: 0 },
         uTime: { value: 0 },
@@ -332,7 +332,7 @@ export class PostFX {
           vec3 s = mmToSRGB(c);
           // Soft vignette.
           vec2 q = vUv - 0.5;
-          s *= 1.0 - dot(q, q) * 0.32;
+          s *= 1.0 - dot(q, q) * 0.16;
           if (uUnderwater > 0.5) s = mix(s, s * vec3(0.55, 0.85, 1.0), 0.5);
           s += (hash(gl_FragCoord.xy + fract(uTime)) - 0.5) / 255.0;
           gl_FragColor = vec4(s, 1.0);

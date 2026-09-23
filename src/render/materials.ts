@@ -85,8 +85,9 @@ vec3 applyFog(vec3 col, vec3 worldPos) {
   float haze = 1.0 - exp(-dist * uFogDensity);
   float edge = smoothstep(uFogNear, uFogFar, dist);
   float f = clamp(max(edge, haze), 0.0, 1.0);
-  vec3 fogDir = normalize(vec3(dir.x, max(dir.y, 0.0) * 0.6 + 0.01, dir.z));
-  vec3 fogCol = skyGradient(fogDir);
+  // Match the actual sky ray, including below the horizon. Lifting this ray
+  // turned fully fogged terrain into bright silhouettes against a darker sky.
+  vec3 fogCol = skyGradient(dir);
   return mix(col, fogCol, f);
 }
 `;
@@ -146,7 +147,7 @@ varying vec3 vWorldPos;
 ${SKY_GLSL}
 vec3 foliageTint(vec3 wp) {
   float n = sin(wp.x * 0.043 + sin(wp.z * 0.031) * 2.0) * 0.5 + sin(wp.z * 0.051 + wp.x * 0.017) * 0.5;
-  return mix(vec3(0.9, 1.02, 0.88), vec3(1.08, 1.0, 0.78), n * 0.5 + 0.5);
+  return mix(vec3(0.94, 1.0, 0.94), vec3(1.04, 1.0, 0.86), n * 0.5 + 0.5);
 }
 `;
 
@@ -277,23 +278,25 @@ ${SKY_GLSL}
 uniform vec4 uRipples[8];
 vec3 waterNormal(vec2 p, float t, float fade) {
   vec2 d = vec2(0.0);
+  // Band-limit waves to their pixel footprint, especially at grazing angles.
+  float footprint = max(length(dFdx(p)), length(dFdy(p)));
   vec2 k1 = vec2(0.8, 0.6);
   vec2 k2 = vec2(-0.5, 0.86);
   vec2 k3 = vec2(0.95, -0.31);
   vec2 k4 = vec2(-0.2, -0.98);
   vec2 k5 = vec2(0.6, -0.8);
-  d += k1 * cos(dot(p, k1) * 1.1 + t * 1.3) * 0.07;
-  d += k2 * cos(dot(p, k2) * 2.3 + t * 1.9) * 0.045;
-  d += k3 * cos(dot(p, k3) * 3.9 + t * 2.5) * 0.03;
-  d += k4 * cos(dot(p, k4) * 6.1 + t * 3.2) * 0.02;
-  d += k5 * cos(dot(p, k5) * 9.7 + t * 4.1) * 0.012;
+  d += k1 * cos(dot(p, k1) * 1.1 + t * 1.3) * 0.07 * exp(-pow(footprint * 1.1 * 0.65, 2.0));
+  d += k2 * cos(dot(p, k2) * 2.3 + t * 1.9) * 0.045 * exp(-pow(footprint * 2.3 * 0.65, 2.0));
+  d += k3 * cos(dot(p, k3) * 3.9 + t * 2.5) * 0.03 * exp(-pow(footprint * 3.9 * 0.65, 2.0));
+  d += k4 * cos(dot(p, k4) * 6.1 + t * 3.2) * 0.02 * exp(-pow(footprint * 6.1 * 0.65, 2.0));
+  d += k5 * cos(dot(p, k5) * 9.7 + t * 4.1) * 0.012 * exp(-pow(footprint * 9.7 * 0.65, 2.0));
   for (int i = 0; i < 8; i++) {
     vec2 offset = p - uRipples[i].xy;
     float r = length(offset);
     float age = uTime - uRipples[i].z;
     if (age >= 0.0 && age < 3.0) {
       float ring = r - age * 2.8;
-      d += offset / max(r, 0.01) * cos(ring * 13.0) * exp(-ring * ring * 2.0) * exp(-age * 1.3) * uRipples[i].w;
+      d += offset / max(r, 0.01) * cos(ring * 13.0) * exp(-ring * ring * 2.0) * exp(-age * 1.3) * uRipples[i].w * exp(-pow(footprint * 6.0, 2.0));
     }
   }
   d *= fade;
@@ -301,11 +304,12 @@ vec3 waterNormal(vec2 p, float t, float fade) {
 }
 `;
 
-/** Water: depth-tinted body, fresnel sky reflection, sun glints, shore foam and soft block edges. */
+/** Water: depth-tinted body, filtered waves, fresnel reflections, sun glints and shore foam. */
 export function createWaterMaterial(env: EnvUniforms): THREE.MeshLambertMaterial {
   const mat = new THREE.MeshLambertMaterial({
     color: 0xffffff,
     transparent: true,
+    forceSinglePass: true,
     depthWrite: true,
     side: THREE.DoubleSide,
     fog: false,
@@ -321,11 +325,9 @@ export function createWaterMaterial(env: EnvUniforms): THREE.MeshLambertMaterial
         vDepth = aData.y / 20.0;
         vSky = aData.z / 255.0;
         vTop = aData.w;
-        if (aData.w > 0.5) {
-          vec3 wp0 = (modelMatrix * vec4(position, 1.0)).xyz;
-          transformed.y += (sin(uTime * 1.2 + wp0.x * 0.7 + wp0.z * 0.4) * 0.5
-                          + sin(uTime * 1.7 - wp0.x * 0.3 + wp0.z * 0.9) * 0.5) * 0.025 * uWind - 0.02;
-        }`,
+        // Keep neighbouring fluid faces watertight. Waves are normal shading,
+        // not independently displaced transparent triangles at the horizon.
+        `,
       )
       .replace('#include <fog_vertex>', '#include <fog_vertex>\nvWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     shader.fragmentShader = shader.fragmentShader
@@ -333,7 +335,7 @@ export function createWaterMaterial(env: EnvUniforms): THREE.MeshLambertMaterial
       .replace(
         '#include <map_fragment>',
         `float depthT = smoothstep(0.0, 4.0, vDepth);
-        diffuseColor.rgb = mix(vec3(0.07, 0.36, 0.39), vec3(0.012, 0.10, 0.19), depthT);`,
+        diffuseColor.rgb = mix(vec3(0.045, 0.31, 0.29), vec3(0.012, 0.085, 0.16), depthT);`,
       )
       .replace('#include <aomap_fragment>', 'reflectedLight.indirectDiffuse *= mix(0.25, 1.0, vSky);')
       .replace(
@@ -349,8 +351,10 @@ export function createWaterMaterial(env: EnvUniforms): THREE.MeshLambertMaterial
           float dist = length(toCam);
           vec3 V = toCam / max(dist, 1e-4);
           bool top = vTop > 0.5;
-          float fade = 1.0 / (1.0 + dist * 0.03);
-          vec3 N = top ? waterNormal(vWorldPos.xz, uTime * max(uWind, 0.0), fade) : normalize(vFaceN);
+          float fade = 1.0 / (1.0 + dist * 0.012);
+          // Derivatives must execute for every fragment in the pixel quad.
+          vec3 waveN = waterNormal(vWorldPos.xz, uTime * max(uWind, 0.0), fade);
+          vec3 N = top ? waveN : normalize(vFaceN);
           if (!gl_FrontFacing) N = -N;
           float NdotV = clamp(dot(N, V), 0.0, 1.0);
           float fres = 0.02 + 0.98 * pow(1.0 - NdotV, 5.0);
@@ -358,7 +362,10 @@ export function createWaterMaterial(env: EnvUniforms): THREE.MeshLambertMaterial
           R.y = abs(R.y);
           vec3 refl = skyGradient(normalize(R)) * mix(0.3, 1.0, vSky);
           vec3 H = normalize(uSunDir + V);
-          float spec = pow(max(dot(N, H), 0.0), 260.0) * 5.0 + pow(max(dot(N, H), 0.0), 40.0) * 0.08;
+          float normalVariance = dot(dFdx(N), dFdx(N)) + dot(dFdy(N), dFdy(N));
+          float gloss = 1.0 / (1.0 / 180.0 + normalVariance * 2.0);
+          float spec = pow(clamp(dot(N, H), 0.0, 1.0), gloss) * (gloss / 180.0) * 2.2;
+          spec += pow(clamp(dot(N, H), 0.0, 1.0), 28.0) * 0.07;
           vec3 col = mix(outgoingLight, refl, fres) + uSunColor * spec * sunVis;
           float shallow = 1.0 - smoothstep(0.0, 1.6, vDepth);
           if (top && gl_FrontFacing) {
@@ -366,26 +373,24 @@ export function createWaterMaterial(env: EnvUniforms): THREE.MeshLambertMaterial
             float foamN = sin(vWorldPos.x * 3.1 + uTime * 0.8) * sin(vWorldPos.z * 2.7 - uTime * 0.6);
             float foam = (1.0 - smoothstep(0.1, 0.55, vDepth)) * (0.55 + 0.45 * foamN);
             col = mix(col, vec3(0.85, 0.92, 0.95) * mix(0.35, 1.0, sunVis * 0.8 + 0.2), clamp(foam, 0.0, 1.0) * 0.55);
-            // Faint voxel grid close to the camera keeps block edges readable.
-            vec2 f = fract(vWorldPos.xz);
-            float e = min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y));
-            float line = 1.0 - smoothstep(0.0, 0.03 + fwidth(e) * 1.5, e);
-            col *= 1.0 - line * 0.07 * (1.0 - smoothstep(6.0, 18.0, dist));
+
           }
           if (!top) {
             float stream = pow(0.5 + 0.5 * sin(vWorldPos.y * 11.0 + uTime * 7.0 + sin(vWorldPos.x * 9.0 + vWorldPos.z * 9.0)), 7.0);
             col += vec3(0.15, 0.23, 0.24) * stream * 0.35;
           }
-          float alpha = mix(0.82, 0.36, shallow);
+          float alpha = mix(0.78, 0.32, shallow);
           alpha = clamp(max(alpha, fres * 1.05), 0.0, 0.97);
           if (!gl_FrontFacing) alpha = 0.6;
+          // Distant water meets the fog without exposing a second horizon behind it.
+          alpha = mix(alpha, 1.0, smoothstep(uFogNear, uFogFar, dist));
           col = applyFog(col, vWorldPos);
           gl_FragColor = vec4(col, alpha);
         }`,
       )
       .replace('#include <fog_fragment>', '');
   };
-  mat.customProgramCacheKey = () => 'voxel-water';
+  mat.customProgramCacheKey = () => 'voxel-water-filtered-v2';
   return mat;
 }
 
@@ -438,13 +443,13 @@ export function createSkyMaterial(env: EnvUniforms): THREE.ShaderMaterial {
           if (uClouds > 0.5 && dir.y > 0.0) {
             vec2 uv = dir.xz / (dir.y + 0.12) * 1.1 + vec2(uTime * 0.006, uTime * 0.0025);
             float n = fbm(uv * 1.3);
-            float c = smoothstep(0.5, 0.78, n);
+            float c = smoothstep(0.56, 0.81, n);
             float fade = smoothstep(0.02, 0.3, dir.y);
             float thick = smoothstep(0.5, 0.95, n);
             vec3 lit = vec3(1.0, 0.98, 0.95) * 1.25 + uSunColor * pow(max(s, 0.0), 6.0) * 0.6;
             vec3 dark = mix(uSkyHorizon, vec3(0.62, 0.66, 0.74), 0.6);
             vec3 cloud = mix(lit, dark, thick * 0.7);
-            col = mix(col, cloud, c * fade * 0.88);
+            col = mix(col, cloud, c * fade * 0.78);
           }
           gl_FragColor = vec4(col, 1.0);
         }

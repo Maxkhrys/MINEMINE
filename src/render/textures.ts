@@ -82,10 +82,10 @@ function noisy(t: Tile, palette: RGBA[], cells = 4, jitter = 0.35): Tile {
   });
 }
 
-const GRASS = ['#4c8a36', '#53943b', '#5a9c40', '#61a445', '#68ab4a'].map((h) => hex(h));
+const GRASS = ['#537b3e', '#5c8644', '#658f4b', '#6d9851', '#77a258'].map((h) => hex(h));
 const DIRT = ['#6e4d33', '#79573b', '#846143', '#8f6b4b', '#9a7654'].map((h) => hex(h));
 const STONE = ['#6a6c6f', '#747679', '#7e8083', '#888a8c', '#929496'].map((h) => hex(h));
-const SAND = ['#cdbd86', '#d6c690', '#ddcf9b', '#e4d8a8'].map((h) => hex(h));
+const SAND = ['#cebc95', '#d6c69f', '#dfd0ac', '#e7dabb'].map((h) => hex(h));
 const SNOW = ['#e3ecf3', '#ebf2f7', '#f3f7fb', '#fbfdff'].map((h) => hex(h));
 
 function drawOreClusters(t: Tile, colors: RGBA[], count: number): void {
@@ -114,7 +114,7 @@ function sideWithCap(t: Tile, capPalette: RGBA[], edge: RGBA): void {
 const painters: Record<TileName, (t: Tile) => void> = {
   grass_top(t) {
     noisy(t, GRASS, 4, 0.45);
-    for (let k = 0; k < 10; k++) t.set(Math.floor(t.rand() * 16), Math.floor(t.rand() * 16), hex('#72b44f'));
+    for (let k = 0; k < 10; k++) t.set(Math.floor(t.rand() * 16), Math.floor(t.rand() * 16), hex('#82aa61'));
   },
   grass_side(t) {
     sideWithCap(t, GRASS, hex('#3b6e28'));
