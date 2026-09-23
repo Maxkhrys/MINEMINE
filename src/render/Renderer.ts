@@ -88,7 +88,7 @@ export class GameRenderer {
       gpu,
     };
 
-    this.camera = new THREE.PerspectiveCamera(75, 1, 0.05, 400);
+    this.camera = new THREE.PerspectiveCamera(75, 1, 0.1, 400);
     this.camera.rotation.order = 'YXZ';
 
     this.env = createEnvUniforms();
@@ -104,11 +104,11 @@ export class GameRenderer {
     this.scene.add(this.chunks.group);
 
     // Lighting: warm sun with soft shadows, sky/ground hemisphere for ambient light.
-    this.sun = new THREE.DirectionalLight(0xfff1dc, 2.7);
+    this.sun = new THREE.DirectionalLight(0xfff1dc, 2.5);
     this.sun.shadow.bias = -0.0004;
     this.sun.shadow.normalBias = 0.04;
     this.scene.add(this.sun, this.sun.target);
-    this.hemi = new THREE.HemisphereLight(0xb4cfff, 0x8f8270, 2.35);
+    this.hemi = new THREE.HemisphereLight(0xc1d9f4, 0x82755f, 1.8);
     this.scene.add(this.hemi);
 
     const skyMat = createSkyMaterial(this.env);
@@ -124,7 +124,7 @@ export class GameRenderer {
     this.scene.add(this.particles.mesh);
     this.held = new HeldItem({ solid, cutout });
 
-    this.setSunDirection(new THREE.Vector3(0.52, 0.64, 0.56));
+    this.setLighting(0);
 
     canvas.addEventListener('webglcontextlost', (e) => {
       e.preventDefault();
@@ -139,12 +139,12 @@ export class GameRenderer {
 
   setLighting(preset: number): void {
     const night = preset === 2, gold = preset === 1;
-    this.sun.intensity = night ? 0.18 : gold ? 2.0 : 2.7;
+    this.sun.intensity = night ? 0.22 : gold ? 2.35 : 2.5;
     this.sun.color.set(night ? 0x91b6ff : gold ? 0xffb571 : 0xfff1dc);
-    this.hemi.intensity = night ? 0.32 : gold ? 1.5 : 2.35;
+    this.hemi.intensity = night ? 0.38 : gold ? 1.25 : 1.8;
     this.env.uSunColor.value.copy(this.sun.color).multiplyScalar(night ? 0.12 : 1);
-    this.env.uSkyZenith.value.set(night ? 0x07132d : gold ? 0x54799f : 0x739ee8);
-    this.env.uSkyHorizon.value.set(night ? 0x1b2b48 : gold ? 0xefb78a : 0xd3e7fc);
+    this.env.uSkyZenith.value.set(night ? 0x07132d : gold ? 0x526c98 : 0x518cce);
+    this.env.uSkyHorizon.value.set(night ? 0x1b2b48 : gold ? 0xefb78a : 0xb5d4e7);
     this.env.uSkyGround.value.set(night ? 0x101622 : 0x778899);
     this.setSunDirection(new THREE.Vector3(0.52, gold ? 0.22 : 0.64, 0.56));
   }
@@ -201,8 +201,8 @@ export class GameRenderer {
 
     const viewDist = s.renderDistance * 16;
     this.env.uFogFar.value = viewDist - 6;
-    this.env.uFogNear.value = viewDist * 0.45;
-    this.env.uFogDensity.value = 0.0022;
+    this.env.uFogNear.value = viewDist * 0.62;
+    this.env.uFogDensity.value = 0.0011;
     this.camera.far = viewDist + 96;
     this.camera.fov = s.fov;
     this.camera.updateProjectionMatrix();
