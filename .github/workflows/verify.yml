@@ -1,0 +1,33 @@
+name: Verify game
+on:
+  push:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build && npm test
+      - run: npx playwright install --with-deps chromium
+      - name: Verify WebGL showcase and lighting
+        run: |
+          npm run dev -- --host 127.0.0.1 > /tmp/minemine-vite.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:5173/ > /dev/null; then break; fi
+            sleep 1
+          done
+          node e2e/showcase.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hearthvale-browser-screenshots
+          path: e2e/screenshots/
+          retention-days: 7

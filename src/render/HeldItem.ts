@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { pixelItemGeometry } from './pixelItem';
 import { blockDef } from '../world/blocks';
 import { buildItemGeometry } from './itemGeometry';
 
@@ -18,7 +19,7 @@ export class HeldItem {
   /** Supplies a 16x16 sprite canvas for non-block items (tools, food). */
   itemSprite: ((id: number) => HTMLCanvasElement | null) | null = null;
   private spriteMats = new Map<number, THREE.Material>();
-  private plane = new THREE.PlaneGeometry(1, 1);
+
 
   constructor(private materials: { solid: THREE.Material; cutout: THREE.Material }) {
     this.hemi = new THREE.HemisphereLight(0xbfd6ff, 0x6b5a48, 1.6);
@@ -40,15 +41,12 @@ export class HeldItem {
       let mat = this.spriteMats.get(id);
       const canvas = this.itemSprite?.(id);
       if (!mat && canvas) {
-        const tex = new THREE.CanvasTexture(canvas);
-        tex.magFilter = THREE.NearestFilter;
-        tex.minFilter = THREE.NearestFilter;
-        tex.colorSpace = THREE.SRGBColorSpace;
-        mat = new THREE.MeshLambertMaterial({ map: tex, alphaTest: 0.5, side: THREE.DoubleSide });
+        mat = new THREE.MeshLambertMaterial({ vertexColors: true });
+        this.geometries.set(id, pixelItemGeometry(canvas));
         this.spriteMats.set(id, mat);
       }
       if (!mat) return;
-      this.mesh = new THREE.Mesh(this.plane, mat);
+      this.mesh = new THREE.Mesh(this.geometries.get(id), mat);
       this.mesh.frustumCulled = false;
       this.mesh.scale.setScalar(0.55);
       this.mesh.rotation.set(-0.2, -0.9, 0.35);
@@ -105,3 +103,4 @@ export class HeldItem {
     renderer.autoClear = autoClear;
   }
 }
+

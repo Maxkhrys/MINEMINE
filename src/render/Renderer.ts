@@ -137,6 +137,18 @@ export class GameRenderer {
     });
   }
 
+  setLighting(preset: number): void {
+    const night = preset === 2, gold = preset === 1;
+    this.sun.intensity = night ? 0.18 : gold ? 2.0 : 2.7;
+    this.sun.color.set(night ? 0x91b6ff : gold ? 0xffb571 : 0xfff1dc);
+    this.hemi.intensity = night ? 0.32 : gold ? 1.5 : 2.35;
+    this.env.uSunColor.value.copy(this.sun.color).multiplyScalar(night ? 0.12 : 1);
+    this.env.uSkyZenith.value.set(night ? 0x07132d : gold ? 0x54799f : 0x739ee8);
+    this.env.uSkyHorizon.value.set(night ? 0x1b2b48 : gold ? 0xefb78a : 0xd3e7fc);
+    this.env.uSkyGround.value.set(night ? 0x101622 : 0x778899);
+    this.setSunDirection(new THREE.Vector3(0.52, gold ? 0.22 : 0.64, 0.56));
+  }
+
   setSunDirection(dir: THREE.Vector3): void {
     this.env.uSunDir.value.copy(dir).normalize();
   }
@@ -255,3 +267,4 @@ export class GameRenderer {
     return this.shadowRange;
   }
 }
+

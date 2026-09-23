@@ -68,6 +68,9 @@ export class World {
   readonly urgent = new Set<number>();
   editsVersion = 0;
   private listeners: EditListener[] = [];
+  private columnListeners: ((col: Column) => void)[] = [];
+
+  onColumn(fn: (col: Column) => void): void { this.columnListeners.push(fn); }
 
   onEdit(fn: EditListener): void {
     this.listeners.push(fn);
@@ -106,6 +109,7 @@ export class World {
     if (edits) for (const [idx, id] of edits) blocks[idx] = id;
     const col = new Column(cx, cz, blocks);
     this.columns.set(key, col);
+    for (const fn of this.columnListeners) fn(col);
     return col;
   }
 
@@ -181,3 +185,4 @@ export class World {
     this.editsVersion++;
   }
 }
+

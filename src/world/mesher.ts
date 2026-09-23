@@ -1,4 +1,4 @@
-import { B, BLOCKS, IS_OCCLUDER, IS_OPAQUE, RENDER_KIND, tile } from './blocks';
+import { B, isWater, waterLevel, BLOCKS, IS_OCCLUDER, IS_OPAQUE, RENDER_KIND, tile } from './blocks';
 import { CHUNK_MASK, CHUNK_SIZE, SECTION_SIZE, WORLD_HEIGHT, columnIndex } from './constants';
 import type { Column } from './World';
 
@@ -382,7 +382,7 @@ export class SectionMesher {
     const cached = this.depthCache[i];
     if (cached >= 0) return cached;
     let d = 0;
-    if (this.pad[i] === B.WATER) {
+    if (isWater(this.pad[i])) {
       const px = i % P;
       const pz = Math.floor(i / DZ) % P;
       const py = Math.floor(i / DY);
@@ -392,7 +392,7 @@ export class SectionMesher {
       const llx = lx & CHUNK_MASK;
       const llz = lz & CHUNK_MASK;
       for (let y = this.baseY + py; y >= 0 && d < 12; y--) {
-        if (col.blocks[columnIndex(llx, y, llz)] !== B.WATER) break;
+        if (!isWater(col.blocks[columnIndex(llx, y, llz)])) break;
         d++;
       }
     }
@@ -406,14 +406,21 @@ export class SectionMesher {
     const lx = px - 1;
     const ly = py - 1;
     const lz = pz - 1;
-    const lowered = pad[i + DY] !== B.WATER;
-    const top = lowered ? WATER_SURFACE : 1;
+    const lowered = !isWater(pad[i + DY]);
+    const top = lowered ? Math.max(0.12, WATER_SURFACE - waterLevel(pad[i]) * 0.1) : 1;
     const layer = tile('water');
     for (let f = 0; f < 6; f++) {
       const face = FACES[f];
       const ni = i + face.nOff;
       const n = pad[ni];
-      if (n === B.WATER || IS_OPAQUE[n]) continue;
+      if (IS_OPAQUE[n]) continue;
+      let bottom = 0;
+      if (isWater(n)) {
+        if (f === 2 || f === 3) continue;
+        const adjacentTop = isWater(pad[ni + DY]) ? 1 : Math.max(0.12, WATER_SURFACE - waterLevel(n) * 0.1);
+        if (adjacentTop >= top) continue;
+        bottom = adjacentTop;
+      }
       b.ensureQuad();
       const sky = Math.round(this.skyAt(ni) * 255);
       const isTop = f === 2;
@@ -429,7 +436,7 @@ export class SectionMesher {
           const cri = s1i + (cv ? face.vOff : -face.vOff);
           depth = (depth + this.waterDepth(s1i) + this.waterDepth(s2i) + this.waterDepth(cri)) / 4;
         }
-        const y = p[1] === 1 ? top : 0;
+        const y = p[1] === 1 ? top : bottom;
         b.vertex(
           lx + p[0],
           ly + y,
@@ -449,3 +456,4 @@ export class SectionMesher {
     }
   }
 }
+

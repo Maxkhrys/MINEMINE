@@ -1,3 +1,38 @@
+# Hearthvale Update
+
+A handcrafted tutorial village for MINEMINE, with flowing water and a longer crafting progression.
+
+## Play and record
+
+Existing browser saves still load normally. To explore the showcase, open **New world**, choose **HEARTHVALE**, then **Create world**. Creating a new world replaces the current browser save, as the menu warns. Fresh installations start in Hearthvale Creative.
+
+- **V** cycles village panorama, bridge, keep, diamond cavern, and square (Hearthvale Creative).
+- **F1** hides the HUD, selection outline and held item for recording.
+- **L** cycles daylight, golden hour and moonlight (Creative).
+- **F** toggles Creative flight; **Space / Shift** ascend / descend; **Ctrl** accelerates flight.
+- **C** sneaks and prevents walking off unsupported edges.
+- **E** opens the full building palette, tools and crafting recipes.
+
+## Added systems
+
+- Seven persisted water flow levels: falls before spreading, recedes when sources are removed, respects solid obstacles, and resumes after chunks reload. Creative palette includes water sources.
+- Falling sand and gravel with a bounded 10 Hz simulation and collision protection around the player.
+- Animated impact and swimming ripples, translucent shallow water, animated waterfall highlights, and exposed faces between different flow heights.
+- Campfire flames, rising smoke, heat damage in Survival, and water extinguishing. Fire does not spread to buildings.
+- Twelve nearby warm light emitters plus a held glow lamp; local lighting uses distance attenuation, not shadow-casting voxel light propagation.
+- Original stone-brick, diamond-ore and campfire textures. Diamond tools have crafting recipes, tier-four harvesting, 1,561 durability, and fully extruded pixel-art held models.
+- Timber cottages with accessible interiors and crafting stations, a keep, bridge, windmill, orchard, garden, spring waterfall and timber-supported mine descending into a diamond cavern.
+
+This remains a standalone voxel sandbox, not a complete Minecraft implementation. Fluids are discrete voxel levels; falling blocks move in simulation steps. Redstone, multiplayer, hostile mobs, full fire spread, buckets and modern Minecraft's complete block set are not implemented.
+
+## Validation
+
+`npm run build` checks TypeScript and builds the Vite bundle. `npm test` covers terrain, meshing, raycasting, fluid drainage and waterfalls, cross-chunk flow, sand collision, sneak protection, showcase geometry and diamond crafting.
+
+`npm run verify` runs the existing browser regression suite with Playwright. `node e2e/showcase.cjs` captures the showcase in three lighting presets. Install Chromium through `npx playwright install chromium` first. Set `URL` to a deployment URL with `?debug` to test it remotely.
+
+---
+
 # MINEMINE
 
 A first-person voxel sandbox that runs in the browser. Explore a generated world,
@@ -157,3 +192,4 @@ tests/                 Vitest unit tests
 - Saves live in this browser's `localStorage`, which limits them to a few MB of edits.
 - Browsers make you click to capture the mouse. After pressing `Esc`, some
   browsers wait about a second before they allow it again.
+

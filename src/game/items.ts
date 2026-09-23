@@ -8,6 +8,11 @@ export const I = {
   STICK: 256,
   COAL: 257,
   IRON_INGOT: 258,
+  DIAMOND: 259,
+  DIAMOND_PICKAXE: 272,
+  DIAMOND_AXE: 273,
+  DIAMOND_SHOVEL: 274,
+  DIAMOND_SWORD: 275,
   WOOD_PICKAXE: 260,
   STONE_PICKAXE: 261,
   IRON_PICKAXE: 262,
@@ -59,13 +64,14 @@ type ItemArt =
 
 export const ITEMS = new Map<number, ItemDef>();
 
-const TIER_NAME = ['', 'Wooden', 'Stone', 'Iron'];
-const TIER_DURABILITY = [0, 60, 132, 250];
+const TIER_NAME = ['', 'Wooden', 'Stone', 'Iron', 'Diamond'];
+const TIER_DURABILITY = [0, 60, 132, 250, 1561];
 const TIER_HEAD: [string, string][] = [
   ['', ''],
   ['#b08954', '#7a5c37'],
   ['#8e9094', '#5d5f62'],
   ['#e6e6e6', '#a7a9ad'],
+  ['#65e1db', '#26898c'],
 ];
 
 function tool(id: number, kind: ToolKind, tier: number): void {
@@ -94,6 +100,11 @@ tool(I.IRON_SHOVEL, 'shovel', 3);
 tool(I.WOOD_SWORD, 'sword', 1);
 tool(I.STONE_SWORD, 'sword', 2);
 tool(I.IRON_SWORD, 'sword', 3);
+tool(I.DIAMOND_PICKAXE, 'pickaxe', 4);
+tool(I.DIAMOND_AXE, 'axe', 4);
+tool(I.DIAMOND_SHOVEL, 'shovel', 4);
+tool(I.DIAMOND_SWORD, 'sword', 4);
+ITEMS.set(I.DIAMOND, { id: I.DIAMOND, name: 'Diamond', maxStack: 64, art: { kind: 'lump', colors: ['#65e1db', '#26898c', '#c8ffef'] } });
 const food = (id: number, name: string, value: number, colors: string[], shape: 'apple' | 'meat' | 'leg' | 'bread') =>
   ITEMS.set(id, { id, name, maxStack: 64, food: value, art: { kind: 'food', colors, shape } });
 food(I.APPLE, 'Apple', 4, ['#d8322c', '#a82320', '#6a3e1d', '#5aa33c'], 'apple');
@@ -131,7 +142,7 @@ export function foodOf(id: number | undefined): number {
 }
 
 /** Mining speed multiplier per tool tier when the tool matches the block. */
-export const TIER_SPEED = [1, 2.2, 4, 6];
+export const TIER_SPEED = [1, 2.2, 4, 6, 8];
 
 /** Melee damage (half-hearts) by held item. */
 export function attackDamage(id: number | undefined): number {
@@ -157,6 +168,12 @@ export interface Recipe {
 const LOGS = [B.OAK_LOG, B.BIRCH_LOG];
 
 export const RECIPES: Recipe[] = [
+  { out: I.DIAMOND_PICKAXE, count: 1, in: [[I.DIAMOND, 3], [I.STICK, 2]], station: 'table' },
+  { out: I.DIAMOND_AXE, count: 1, in: [[I.DIAMOND, 3], [I.STICK, 2]], station: 'table' },
+  { out: I.DIAMOND_SHOVEL, count: 1, in: [[I.DIAMOND, 1], [I.STICK, 2]], station: 'table' },
+  { out: I.DIAMOND_SWORD, count: 1, in: [[I.DIAMOND, 2], [I.STICK, 1]], station: 'table' },
+  { out: B.STONE_BRICKS, count: 4, in: [[B.STONE, 4]], station: 'table' },
+  { out: B.CAMPFIRE, count: 1, in: [[LOGS, 3], [I.STICK, 3], [I.COAL, 1]], station: 'table' },
   { out: B.OAK_PLANKS, count: 4, in: [[LOGS, 1]], station: 'hand' },
   { out: I.STICK, count: 4, in: [[B.OAK_PLANKS, 2]], station: 'hand' },
   { out: B.CRAFTING_TABLE, count: 1, in: [[B.OAK_PLANKS, 4]], station: 'hand' },
@@ -275,3 +292,4 @@ export function drawItemIcon(def: ItemDef): { url: string; canvas: HTMLCanvasEle
   bctx.drawImage(c, 0, 0, 64, 64);
   return { url: big.toDataURL(), canvas: c };
 }
+

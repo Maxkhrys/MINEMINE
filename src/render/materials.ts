@@ -6,6 +6,8 @@ import * as THREE from 'three';
  */
 export interface EnvUniforms {
   uTime: THREE.IUniform<number>;
+  uLocalLights: THREE.IUniform<THREE.Vector4[]>;
+  uRipples: THREE.IUniform<THREE.Vector4[]>;
   uWind: THREE.IUniform<number>;
   uSunDir: THREE.IUniform<THREE.Vector3>;
   uSunColor: THREE.IUniform<THREE.Color>;
@@ -26,6 +28,8 @@ export interface EnvUniforms {
 export function createEnvUniforms(): EnvUniforms {
   return {
     uTime: { value: 0 },
+    uLocalLights: { value: Array.from({ length: 12 }, () => new THREE.Vector4()) },
+    uRipples: { value: Array.from({ length: 8 }, () => new THREE.Vector4(0, 0, -100, 0)) },
     uWind: { value: 1 },
     uSunDir: { value: new THREE.Vector3(0.45, 0.62, 0.38).normalize() },
     uSunColor: { value: new THREE.Color(1.0, 0.93, 0.82) },
@@ -132,6 +136,7 @@ const TERRAIN_FRAGMENT_PARS = /* glsl */ `
 uniform highp sampler2DArray uBlockTex;
 uniform float uCaveAmbient;
 uniform float uEmissive;
+uniform vec4 uLocalLights[12];
 varying vec2 vTileUv;
 varying float vLayer;
 varying float vAo;
@@ -168,6 +173,14 @@ const TERRAIN_LIGHT_MODULATION = /* glsl */ `
   #endif
   reflectedLight.directDiffuse *= directSky * mix(0.75, 1.0, aoLin);
   if ((fflags & 8) != 0) totalEmissiveRadiance += texel.rgb * uEmissive;
+  vec3 worldN = inverseTransformDirection(normal, viewMatrix);
+  for (int i = 0; i < 12; i++) {
+    vec3 delta = uLocalLights[i].xyz - vWorldPos;
+    float distL = length(delta);
+    float falloff = pow(max(0.0, 1.0 - distL / 10.0), 2.0);
+    float facing = 0.25 + 0.75 * max(dot(worldN, delta / max(distL, 0.001)), 0.0);
+    totalEmissiveRadiance += texel.rgb * vec3(1.0, 0.57, 0.23) * falloff * facing * uLocalLights[i].w;
+  }
 }
 `;
 
@@ -261,6 +274,7 @@ varying float vSky;
 varying float vTop;
 ${SKY_GLSL}
 
+uniform vec4 uRipples[8];
 vec3 waterNormal(vec2 p, float t, float fade) {
   vec2 d = vec2(0.0);
   vec2 k1 = vec2(0.8, 0.6);
@@ -273,6 +287,15 @@ vec3 waterNormal(vec2 p, float t, float fade) {
   d += k3 * cos(dot(p, k3) * 3.9 + t * 2.5) * 0.03;
   d += k4 * cos(dot(p, k4) * 6.1 + t * 3.2) * 0.02;
   d += k5 * cos(dot(p, k5) * 9.7 + t * 4.1) * 0.012;
+  for (int i = 0; i < 8; i++) {
+    vec2 offset = p - uRipples[i].xy;
+    float r = length(offset);
+    float age = uTime - uRipples[i].z;
+    if (age >= 0.0 && age < 3.0) {
+      float ring = r - age * 2.8;
+      d += offset / max(r, 0.01) * cos(ring * 13.0) * exp(-ring * ring * 2.0) * exp(-age * 1.3) * uRipples[i].w;
+    }
+  }
   d *= fade;
   return normalize(vec3(-d.x, 1.0, -d.y));
 }
@@ -310,7 +333,7 @@ export function createWaterMaterial(env: EnvUniforms): THREE.MeshLambertMaterial
       .replace(
         '#include <map_fragment>',
         `float depthT = smoothstep(0.0, 4.0, vDepth);
-        diffuseColor.rgb = mix(vec3(0.09, 0.30, 0.33), vec3(0.018, 0.085, 0.15), depthT);`,
+        diffuseColor.rgb = mix(vec3(0.07, 0.36, 0.39), vec3(0.012, 0.10, 0.19), depthT);`,
       )
       .replace('#include <aomap_fragment>', 'reflectedLight.indirectDiffuse *= mix(0.25, 1.0, vSky);')
       .replace(
@@ -349,7 +372,11 @@ export function createWaterMaterial(env: EnvUniforms): THREE.MeshLambertMaterial
             float line = 1.0 - smoothstep(0.0, 0.03 + fwidth(e) * 1.5, e);
             col *= 1.0 - line * 0.07 * (1.0 - smoothstep(6.0, 18.0, dist));
           }
-          float alpha = mix(0.9, 0.5, shallow);
+          if (!top) {
+            float stream = pow(0.5 + 0.5 * sin(vWorldPos.y * 11.0 + uTime * 7.0 + sin(vWorldPos.x * 9.0 + vWorldPos.z * 9.0)), 7.0);
+            col += vec3(0.15, 0.23, 0.24) * stream * 0.35;
+          }
+          float alpha = mix(0.82, 0.36, shallow);
           alpha = clamp(max(alpha, fres * 1.05), 0.0, 0.97);
           if (!gl_FrontFacing) alpha = 0.6;
           col = applyFog(col, vWorldPos);
@@ -427,3 +454,4 @@ export function createSkyMaterial(env: EnvUniforms): THREE.ShaderMaterial {
     `,
   });
 }
+
