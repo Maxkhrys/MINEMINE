@@ -38,6 +38,7 @@ const assert = require('node:assert/strict');
   await page.locator('#item-search').fill('');
   await page.getByRole('button', { name: 'Tools', exact: true }).click();
   assert.equal(await page.locator('.catalog-grid .slot').count(), 16);
+  await shot('workshop-tools');
   await page.getByRole('button', { name: 'Diamond Pickaxe', exact: true }).click({ modifiers: ['Shift'] });
   assert.ok(await page.evaluate(() => window.__minemine.inventory.slots.slice(0,9).some(s => s?.id === 272)));
   await page.getByRole('button', { name: 'Close inventory' }).click();
