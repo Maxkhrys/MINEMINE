@@ -953,3 +953,7 @@ input[type='text'] {
     height: 13px;
   }
 }
+
+
+.showcase-choice { text-align: left; border: 1px solid #92b77d77; background: linear-gradient(120deg, #223d2fe8, #152b27e8); padding: 18px 20px; margin-bottom: 18px; color: #e8f4cf; letter-spacing: .04em; }
+.showcase-choice small { display: block; margin-top: 8px; color: #b2c2b6; font-size: 12px; line-height: 1.6; letter-spacing: 0; font-weight: normal; }

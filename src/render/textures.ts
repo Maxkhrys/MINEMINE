@@ -255,6 +255,23 @@ const painters: Record<TileName, (t: Tile) => void> = {
     painters.stone(t);
     drawOreClusters(t, ['#1f1f21', '#2c2c2f', '#38383b'].map((h) => hex(h)), 4);
   },
+  stone_bricks(t) {
+    t.fill((x, y) => {
+      const seam = y % 8 === 0 || (x + (Math.floor(y / 8) % 2) * 8) % 16 === 0;
+      return shade(hex(seam ? '#535c60' : '#929997'), 0.9 + t.rand() * 0.2);
+    });
+  },
+  diamond_ore(t) {
+    painters.stone(t);
+    drawOreClusters(t, ['#32a8b5', '#65dfe2', '#b7f7ec'].map(h => hex(h)), 5);
+  },
+  campfire(t) {
+    t.fill((x, y) => {
+      if (y > 11) return shade(hex('#543623'), 0.8 + t.rand() * 0.4);
+      const flame = Math.sin(x * 1.8) * 3 + 5;
+      return hex(y > flame ? (y > 8 ? '#ffcd56' : '#ec6b26') : '#382722');
+    });
+  },
   iron_ore(t) {
     painters.stone(t);
     drawOreClusters(t, ['#c99873', '#d8ad88', '#e7c3a1', '#b9825d'].map((h) => hex(h)), 4);
@@ -570,3 +587,4 @@ export function sampleTileColor(tiles: Uint8ClampedArray[], layer: number, rand:
 }
 
 export { mix as mixColor };
+

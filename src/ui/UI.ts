@@ -28,6 +28,10 @@ const CONTROLS: [string, string][] = [
   ['<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>', 'Move'],
   ['<kbd>Space</kbd>', 'Jump / swim up (hold to fly up in Creative)'],
   ['<kbd>Shift</kbd>', 'Sprint (fly down in Creative)'],
+  ['<kbd>C</kbd>', 'Sneak safely along edges'],
+  ['<kbd>F1</kbd>', 'Clean video view: hide HUD and hand'],
+  ['<kbd>L</kbd>', 'Day / golden hour / moonlight (Creative)'],
+  ['<kbd>V</kbd>', 'Cycle five showcase viewpoints (Hearthvale Creative)'],
   ['Mouse', 'Look around'],
   ['Left click / hold', 'Mine the outlined block (reach 4.5 blocks)'],
   ['Right click', 'Place the selected block on the outlined face, eat food, or use a crafting table / furnace'],
@@ -348,7 +352,7 @@ export class UI {
     const isTitle = this.menuKind === 'title';
     this.menuPanel.append(
       h('h1', { class: 'logo' }, 'MINEMINE'),
-      h('p', { class: 'tagline' }, isTitle ? 'A voxel sandbox. Dig, build, explore.' : 'Game paused'),
+      h('p', { class: 'tagline' }, isTitle ? 'The Hearthvale Update · Build your own adventure.' : 'Game paused'),
       h(
         'div',
         { class: 'world-info' },
@@ -417,6 +421,7 @@ export class UI {
     input.addEventListener('keyup', (e) => e.stopPropagation());
     this.menuPanel.append(
       h('h2', {}, 'Create a new world'),
+      h('button', { class: 'showcase-choice', onclick: () => { input.value = 'Hearthvale'; mode = 'creative'; renderSeg(); } }, 'HEARTHVALE  ·  Tutorial village', h('small', {}, 'Stone keep, riverside cottages, windmill and diamond mine. Select, then create below.')),
       h('div', { class: 'stack' }, h('label', { class: 'field' }, 'World seed', input), h('div', { class: 'field label-like', role: 'group', 'aria-labelledby': 'mode-label' }, h('span', { id: 'mode-label' }, 'Game mode'), seg), desc),
       h('p', { class: 'note' }, 'This replaces the current world and its saved changes.'),
       h('div', { class: 'footer' }, h('button', { onclick: () => this.go('main') }, 'Cancel'), h('button', { class: 'primary', onclick: create }, 'Create world')),
@@ -810,3 +815,4 @@ export class UI {
     if (this.inv?.mode !== 'creative' && c.count > 1) this.cursorEl.append(h('span', { class: 'count' }, String(c.count)));
   }
 }
+

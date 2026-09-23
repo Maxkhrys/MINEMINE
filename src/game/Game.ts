@@ -1,14 +1,17 @@
 import * as THREE from 'three';
 import { Sfx } from '../audio/Sfx';
 import { GameRenderer } from '../render/Renderer';
+import { WorldEffects } from '../render/WorldEffects';
 import { UI } from '../ui/UI';
-import { B, IS_REPLACEABLE, IS_SOLID, IS_TARGETABLE, blockDef, canSupportPlant } from '../world/blocks';
+import { B, isWater, IS_REPLACEABLE, IS_SOLID, IS_TARGETABLE, blockDef, canSupportPlant } from '../world/blocks';
 import { ChunkManager } from '../world/ChunkManager';
-import { CHUNK_SIZE, SEA_LEVEL, WORLD_HEIGHT } from '../world/constants';
+import { CHUNK_SIZE, WORLD_HEIGHT } from '../world/constants';
 import { TerrainGenerator, type SpawnPoint } from '../world/generator';
 import { seedFromString } from '../world/noise';
 import { raycastVoxels, type RayHit } from '../world/raycast';
 import { World } from '../world/World';
+import { WorldPhysics } from '../world/Physics';
+import { SHOWCASE_NAME, SHOWCASE_SEED } from '../world/showcase';
 import { Input } from './Input';
 import { I, ITEMS, TIER_SPEED, attackDamage, drawItemIcon, foodOf, isBlockItem, itemName, toolOf, type Station } from './items';
 import { MobManager, type Mob } from './Mobs';
@@ -25,16 +28,6 @@ type State = 'loading' | 'menu' | 'playing' | 'inventory' | 'dead';
 export const MAX_HEALTH = 20;
 export const MAX_FOOD = 20;
 const MAX_AIR = 10;
-
-interface WaterTask {
-  x: number;
-  y: number;
-  z: number;
-  ox: number;
-  oz: number;
-  budget: number;
-  at: number;
-}
 
 export class Game {
   readonly renderer: GameRenderer;
@@ -58,7 +51,11 @@ export class Game {
   private mining: { x: number; y: number; z: number; progress: number; sound: number } | null = null;
   private placeTimer = 0;
   private lastSpaceTap = -10;
-  private waterQueue: WaterTask[] = [];
+  readonly physics = new WorldPhysics(this.world);
+  readonly effects: WorldEffects;
+  private cinematic = false;
+  private lightPreset = 0;
+  private viewpoint = 0;
   private createdAt = Date.now();
   private saveDirty = false;
   private lastSave = 0;
@@ -99,6 +96,7 @@ export class Game {
   constructor(canvas: HTMLCanvasElement, uiRoot: HTMLElement) {
     this.input = new Input(canvas);
     this.renderer = new GameRenderer(canvas, (x, y, z) => IS_SOLID[this.world.getBlock(x, y, z)] === 1);
+    this.effects = new WorldEffects(this.world, this.renderer.scene, this.renderer.env);
     const caps = this.renderer.caps;
     const params = new URLSearchParams(location.search);
     const fallback = params.has('safe') || caps.softwareRenderer || /Mobi|Android/i.test(navigator.userAgent) ? 'low' : 'high';
@@ -159,7 +157,7 @@ export class Game {
 
     const saved = loadSave();
     if (saved) this.startWorld(saved.seed, saved.seedText, saved.mode, saved);
-    else this.newWorld('', 'survival');
+    else this.newWorld(SHOWCASE_NAME, 'creative');
   }
 
   start(): void {
@@ -186,7 +184,9 @@ export class Game {
     this.renderer.particles.clear();
     this.mobs.clear();
     this.ui.hideDeath();
-    this.waterQueue = [];
+    this.physics.clear();
+    this.effects.clear();
+    this.cinematic = false;
     this.mining = null;
     this.target = null;
 
@@ -203,7 +203,7 @@ export class Game {
     this.player.x = valid ? p.x : this.spawn.x;
     this.player.y = valid ? p.y : this.spawn.y;
     this.player.z = valid ? p.z : this.spawn.z;
-    this.player.yaw = valid ? p.yaw : Math.PI * 0.75;
+    this.player.yaw = valid ? p.yaw : this.seed === SHOWCASE_SEED ? 0 : Math.PI * 0.75;
     this.player.pitch = valid ? p.pitch : -0.12;
     this.player.flying = !!(valid && p.flying && mode === 'creative');
     this.player.vx = this.player.vy = this.player.vz = 0;
@@ -387,7 +387,7 @@ export class Game {
       const strafe = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
       // Unloaded terrain acts as a wall; do not simulate until the player's column exists.
       if (this.world.isLoadedAt(Math.floor(this.player.x), Math.floor(this.player.z))) {
-        this.player.update(dt, { forward, strafe, jump: k.has('Space'), down: shift, sprint: shift && !this.player.flying && (this.mode === 'creative' || this.food > 6) }, this.mode === 'creative');
+        this.player.update(dt, { forward, strafe, jump: k.has('Space'), down: shift, sneak: k.has('KeyC'), sprint: (shift || k.has('ControlLeft') || k.has('ControlRight')) && (this.mode === 'creative' || this.food > 6) }, this.mode === 'creative');
       }
       this.footsteps();
       this.survivalTick(dt);
@@ -401,7 +401,9 @@ export class Game {
     cam.getWorldDirection(this.camDir);
     const budget = this.state === 'loading' ? 14 : 5;
     this.chunks.update(cam.position.x, cam.position.z, this.camDir.x, this.camDir.z, budget);
-    this.processWater();
+    if (this.state === 'playing' && this.physics.update(dt, (x, y, z) => this.player.intersectsBlock(x, y, z))) {
+      this.saveDirty = true;
+    }
     if (this.state === 'playing' || this.state === 'inventory' || this.state === 'dead') {
       for (const m of this.mobs.update(dt, this.player.x, this.player.z)) {
         if (Math.hypot(m.x - this.player.x, m.z - this.player.z) < 16) this.sfx.mob(m.kind);
@@ -415,7 +417,7 @@ export class Game {
     const m = this.mining;
     const t = this.target;
     const progress = m && t && m.x === t.x && m.y === t.y && m.z === t.z ? m.progress : 0;
-    const showOutline = t && (this.state === 'playing' || this.state === 'inventory');
+    const showOutline = !this.cinematic && t && (this.state === 'playing' || this.state === 'inventory');
     this.renderer.selection.update(t?.x ?? 0, t?.y ?? 0, t?.z ?? 0, showOutline ? t.id : 0, t?.t ?? 0, progress);
 
     if (this.saveDirty && this.time - this.lastSave > 1.5) this.save();
@@ -507,6 +509,28 @@ export class Game {
       if (!this.debug) this.ui.setDebug(null);
     }
     if (this.state === 'playing') {
+      if (pressed.has('F1')) {
+        this.cinematic = !this.cinematic;
+        this.ui.setHudVisible(!this.cinematic);
+        this.renderer.selection.outline.visible = false;
+      }
+      if (pressed.has('KeyV') && this.mode === 'creative' && this.seed === SHOWCASE_SEED) {
+        const shots = [
+          { x: 37, y: 85, z: 57, yaw: 0.58, pitch: -0.38, name: 'Village panorama' },
+          { x: 17, y: 64, z: 27, yaw: -0.75, pitch: -0.12, name: 'River bridge & windmill' },
+          { x: 0.5, y: 62, z: -19, yaw: 0, pitch: 0.12, name: 'Keep entrance' },
+          { x: -38, y: 33, z: -8, yaw: 0, pitch: -0.12, name: 'Diamond cavern' },
+          { x: 0.5, y: 61, z: 28.5, yaw: 0, pitch: -0.12, name: 'Village square' },
+        ];
+        const shot = shots[this.viewpoint++ % shots.length];
+        Object.assign(this.player, shot, { vx: 0, vy: 0, vz: 0, flying: true });
+        this.ui.toast(shot.name, 1600);
+      }
+      if (pressed.has('KeyL') && this.mode === 'creative') {
+        this.lightPreset = (this.lightPreset + 1) % 3;
+        this.renderer.setLighting(this.lightPreset);
+        this.ui.toast(['Daylight', 'Golden hour', 'Moonlight'][this.lightPreset], 1500);
+      }
       for (let i = 1; i <= 9; i++) if (pressed.has(`Digit${i}`) || pressed.has(`Numpad${i}`)) this.inventory.select(i - 1);
       if (this.input.wheel !== 0) this.inventory.select(this.inventory.selected + this.input.wheel);
       if (pressed.has('KeyE')) {
@@ -560,7 +584,7 @@ export class Game {
   private breakTime(id: number): number {
     const h = blockDef(id).hardness;
     if (!Number.isFinite(h)) return Infinity;
-    if (this.mode === 'creative') return 0.18;
+    if (this.mode === 'creative') return 0.12;
     const { correct, canDrop, tier } = this.harvestInfo(id);
     let t = h;
     if (!canDrop) t *= 3.3;
@@ -681,7 +705,7 @@ export class Game {
     const harvest = this.harvestInfo(id);
     if (!this.world.setBlock(x, y, z, B.AIR)) return false;
     if (harvest.canDrop) this.collect(def.drop);
-    else if (this.mode === 'survival') this.ui.toast(def.minTier > 1 ? `${def.name} needs a stone pickaxe or better` : `${def.name} needs a pickaxe to collect`, 1600);
+    else if (this.mode === 'survival') this.ui.toast(def.minTier > 1 ? `${def.name} needs ${def.minTier >= 3 ? "an iron" : "a stone"} pickaxe or better` : `${def.name} needs a pickaxe to collect`, 1600);
     if ((id === B.OAK_LEAVES || id === B.BIRCH_LEAVES) && Math.random() < 0.1) this.collect(I.APPLE);
     if (this.mode === 'survival') {
       this.exhaustion += 0.025;
@@ -767,6 +791,8 @@ export class Game {
       p.lastFall = 0;
       if (dmg > 0 && !p.inWater) this.damage(dmg, 'You hit the ground too hard');
     }
+    const underfoot = this.world.getBlock(Math.floor(p.x), Math.floor(p.y - 0.05), Math.floor(p.z));
+    if (underfoot === B.CAMPFIRE && !p.inWater) this.damage(1, 'You stood on a campfire');
     // Hunger drains with activity.
     const moved = p.walked - this.lastWalked;
     this.lastWalked = p.walked;
@@ -855,69 +881,17 @@ export class Game {
   // ------------------------------------------------------------------ water
 
   private queueWaterIfAdjacent(x: number, y: number, z: number): void {
-    const w = this.world;
-    const wet =
-      w.getBlock(x, y + 1, z) === B.WATER ||
-      w.getBlock(x + 1, y, z) === B.WATER ||
-      w.getBlock(x - 1, y, z) === B.WATER ||
-      w.getBlock(x, y, z + 1) === B.WATER ||
-      w.getBlock(x, y, z - 1) === B.WATER;
-    if (wet) this.waterQueue.push({ x, y, z, ox: x, oz: z, budget: 40, at: this.time + 0.3 });
-  }
-
-  /** Simple bounded water flow: fills opened cells, falls first, then spreads a few blocks. */
-  private processWater(): void {
-    if (this.waterQueue.length === 0) return;
-    const w = this.world;
-    const next: WaterTask[] = [];
-    let changed = false;
-    let processed = 0;
-    for (const task of this.waterQueue) {
-      if (task.at > this.time || processed > 48) {
-        next.push(task);
-        continue;
-      }
-      processed++;
-      const cur = w.getBlock(task.x, task.y, task.z);
-      if (cur !== B.AIR && !(IS_REPLACEABLE[cur] && cur !== B.WATER)) continue;
-      if (!w.setBlock(task.x, task.y, task.z, B.WATER)) continue;
-      changed = true;
-      if (task.budget <= 0) continue;
-      const below = w.getBlock(task.x, task.y - 1, task.z);
-      const push = (x: number, y: number, z: number) => {
-        const b = w.getBlock(x, y, z);
-        if (b === B.AIR || (IS_REPLACEABLE[b] && b !== B.WATER)) {
-          next.push({ x, y, z, ox: task.ox, oz: task.oz, budget: task.budget - 1, at: this.time + 0.25 });
-        }
-      };
-      if (below === B.AIR || (IS_REPLACEABLE[below] && below !== B.WATER)) {
-        push(task.x, task.y - 1, task.z);
-      } else if (task.y <= SEA_LEVEL + 8) {
-        for (const [dx, dz] of [
-          [1, 0],
-          [-1, 0],
-          [0, 1],
-          [0, -1],
-        ]) {
-          const nx = task.x + dx;
-          const nz = task.z + dz;
-          if (Math.abs(nx - task.ox) + Math.abs(nz - task.oz) > 5) continue;
-          push(nx, task.y, nz);
-        }
-      }
-    }
-    this.waterQueue = next;
-    if (changed) {
-      this.chunks.flushUrgent();
-      this.saveDirty = true;
-    }
+    this.physics.wake(x, y, z);
   }
 
   // ------------------------------------------------------------------ feedback
 
   private footsteps(): void {
     const p = this.player;
-    if (p.inWater && !this.wasInWater && p.vy < -3) this.sfx.splash();
+    if (p.inWater && !this.wasInWater) {
+      this.sfx.splash();
+      this.effects.ripple(p.x, p.z, this.time, 0.4);
+    }
     this.wasInWater = p.inWater;
     if (!p.onGround) return;
     if (p.walked - this.stepDist > 1.7) {
@@ -931,9 +905,13 @@ export class Game {
 
   private draw(dt: number): void {
     const cam = this.renderer.camera;
-    const underwater = this.world.getBlock(Math.floor(cam.position.x), Math.floor(cam.position.y), Math.floor(cam.position.z)) === B.WATER;
+    const underwater = isWater(this.world.getBlock(Math.floor(cam.position.x), Math.floor(cam.position.y), Math.floor(cam.position.z)));
     this.renderer.particles.update(dt);
-    this.renderer.render(this.time, underwater, this.state === 'playing');
+    const held = this.inventory.selectedStack?.id;
+    this.effects.update(this.time, cam.position, held === B.GLOW_LAMP || held === B.CAMPFIRE);
+    if (this.player.inWater && this.player.horizontalSpeed > 0.3)
+      this.effects.ripple(this.player.x, this.player.z, this.time, 0.12);
+    this.renderer.render(this.time, underwater, this.state === 'playing' && !this.cinematic);
     this.ui.setUnderwater(underwater && !this.renderer.postActive);
     this.ui.setBadge(this.mode, this.player.flying);
     this.ui.setVitals(this.mode === 'survival', this.health, this.food, this.air, MAX_AIR);
@@ -976,3 +954,4 @@ export class Game {
     return lines.join('\n');
   }
 }
+

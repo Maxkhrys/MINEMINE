@@ -1,4 +1,4 @@
-import { B } from '../world/blocks';
+import { isWater } from '../world/blocks';
 import type { World } from '../world/World';
 
 export const PLAYER_WIDTH = 0.6;
@@ -20,6 +20,7 @@ export interface MoveInput {
   jump: boolean;
   down: boolean;
   sprint: boolean;
+  sneak?: boolean;
 }
 
 /** First-person player: an axis-aligned box swept through the voxel grid one axis at a time. */
@@ -152,12 +153,12 @@ export class Player {
     for (let z = fz; z <= tz && !body; z++) {
       for (let x = fx; x <= tx && !body; x++) {
         for (let y = Math.floor(this.y + 0.1); y <= Math.floor(this.y + Math.min(1.2, this.height * 0.66)); y++) {
-          if (w.getBlock(x, y, z) === B.WATER) body = true;
+          if (isWater(w.getBlock(x, y, z))) body = true;
         }
       }
     }
     this.inWater = body;
-    this.headInWater = w.getBlock(Math.floor(this.x), Math.floor(this.eyeY + 0.08), Math.floor(this.z)) === B.WATER;
+    this.headInWater = isWater(w.getBlock(Math.floor(this.x), Math.floor(this.eyeY + 0.08), Math.floor(this.z)));
   }
 
   update(dt: number, input: MoveInput, canFly: boolean): void {
@@ -186,6 +187,7 @@ export class Player {
     let speed = input.sprint ? this.sprintSpeed : this.walkSpeed;
     if (this.flying) speed = input.sprint ? FLY_SPRINT_SPEED : FLY_SPEED;
     else if (this.inWater) speed = SWIM_SPEED * (input.sprint ? 1.3 : 1);
+    if (input.sneak && !this.flying && !this.inWater) speed *= 0.3;
     const tx = fx * speed;
     const tz = fz * speed;
     const accel = (this.flying ? 10 : this.onGround ? 16 : this.inWater ? 6 : 4) * (this.stun > 0 ? 0.08 : 1);
@@ -201,6 +203,7 @@ export class Player {
       this.vy -= 9 * dt;
       this.vy *= Math.max(0, 1 - 2.2 * dt);
       if (input.jump) this.vy = Math.min(this.vy + 30 * dt, 3.4);
+      if (input.down) this.vy = Math.max(-4, this.vy - 14 * dt);
       if (this.vy < -4) this.vy = -4;
     } else {
       this.vy -= GRAVITY * dt;
@@ -230,11 +233,20 @@ export class Player {
       this.onGround = false;
     }
     // Jumping out of water onto a ledge: small boost when pushing against a wall.
-    const wantX = this.vx * dt;
+    const supported = (x: number, z: number) => {
+      const h = this.width / 2 - EPS;
+      for (const dx of [-h, h]) for (const dz of [-h, h])
+        if (this.world.isSolidForCollision(Math.floor(x + dx), Math.floor(this.y - 0.08), Math.floor(z + dz))) return true;
+      return false;
+    };
+    const edge = input.sneak && this.onGround && !this.flying && !this.inWater;
+    let wantX = this.vx * dt;
+    if (edge && !supported(this.x + wantX, this.z)) { wantX = 0; this.vx = 0; }
     const dx = this.moveAxis(0, wantX);
     this.x += dx;
     if (dx !== wantX) this.vx = 0;
-    const wantZ = this.vz * dt;
+    let wantZ = this.vz * dt;
+    if (edge && !supported(this.x, this.z + wantZ)) { wantZ = 0; this.vz = 0; }
     const dz = this.moveAxis(2, wantZ);
     this.z += dz;
     if (dz !== wantZ) this.vz = 0;
@@ -251,3 +263,4 @@ export class Player {
     }
   }
 }
+

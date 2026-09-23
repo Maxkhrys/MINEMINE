@@ -39,6 +39,9 @@ export const TILE_NAMES = [
   'furnace_front',
   'furnace_side',
   'furnace_top',
+  'stone_bricks',
+  'diamond_ore',
+  'campfire',
 ] as const;
 
 export type TileName = (typeof TILE_NAMES)[number];
@@ -76,6 +79,12 @@ export const B = {
   SNOWY_GRASS: 25,
   CRAFTING_TABLE: 26,
   FURNACE: 27,
+  STONE_BRICKS: 28,
+  DIAMOND_ORE: 29,
+  CAMPFIRE: 30,
+  FLOW_1: 31,
+  FLOW_7: 37,
+  FALLING_WATER: 38,
 } as const;
 
 export type RenderKind = 'none' | 'solid' | 'cutout' | 'plant' | 'water';
@@ -332,6 +341,14 @@ reg(
   }),
 );
 
+reg(solid(B.STONE_BRICKS, { name: 'Stone Bricks', faces: all('stone_bricks'), hardness: 1.6, tool: 'pickaxe', minTier: 1 }));
+reg(solid(B.DIAMOND_ORE, { name: 'Diamond Ore', faces: all('diamond_ore'), hardness: 3, tool: 'pickaxe', minTier: 3, drop: 259 }));
+reg(solid(B.CAMPFIRE, { name: 'Campfire', faces: all('campfire'), hardness: 0.5, tool: 'axe', emissive: true, sound: 'wood' }));
+// Source and flow states are block IDs, so saves preserve fluid state exactly.
+BLOCKS[B.WATER].placeable = true;
+for (let id = B.FLOW_1; id <= B.FALLING_WATER; id++) reg({ ...BLOCKS[B.WATER], id, placeable: false });
+export function isWater(id: number): boolean { return id === B.WATER || (id >= B.FLOW_1 && id <= B.FALLING_WATER); }
+export function waterLevel(id: number): number { return id === B.WATER || id === B.FALLING_WATER ? 0 : id - B.FLOW_1 + 1; }
 export const BLOCK_COUNT = BLOCKS.length;
 
 // Fast lookup tables used in hot loops (meshing, physics, raycasting).
@@ -378,6 +395,10 @@ export const PALETTE: number[] = [
   B.GLOW_LAMP,
   B.CRAFTING_TABLE,
   B.FURNACE,
+  B.STONE_BRICKS,
+  B.DIAMOND_ORE,
+  B.CAMPFIRE,
+  B.WATER,
   B.TALL_GRASS,
   B.RED_FLOWER,
   B.YELLOW_FLOWER,
@@ -390,3 +411,4 @@ export function blockDef(id: number): BlockDef {
 export function canSupportPlant(id: number): boolean {
   return id === B.GRASS || id === B.DIRT || id === B.SNOWY_GRASS;
 }
+

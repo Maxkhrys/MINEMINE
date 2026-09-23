@@ -1,4 +1,5 @@
 import { B } from './blocks';
+import { SHOWCASE_SEED, buildShowcase } from './showcase';
 import { CHUNK_SIZE, COLUMN_VOLUME, SEA_LEVEL, WORLD_HEIGHT, columnIndex } from './constants';
 import { SimplexNoise, hash2, hash3, mulberry32, smoothstep } from './noise';
 
@@ -62,7 +63,7 @@ export class TerrainGenerator {
     this.caves = new SimplexNoise(this.seed ^ 0xc4fe);
     this.caves2 = new SimplexNoise(this.seed ^ 0xbeef);
     this.flora = new SimplexNoise(this.seed ^ 0xf10a);
-    this.spawn = spawn ?? this.findSpawn();
+    this.spawn = spawn ?? (this.seed === SHOWCASE_SEED ? { x: 0.5, y: 61, z: 28.5 } : this.findSpawn());
   }
 
   /** Samples the surface height and biome at a world column. Result in sampleH / sampleBiome. */
@@ -78,7 +79,8 @@ export class TerrainGenerator {
     h += e * 9 * (0.45 + 0.55 * smoothstep(-0.2, 0.35, c));
     h += d * 2.2;
     h += r * r * mask * 58 * smoothstep(-0.15, 0.2, c);
-    const height = Math.max(4, Math.min(WORLD_HEIGHT - 10, Math.floor(h)));
+    const villageBlend = this.seed === SHOWCASE_SEED ? 1 - smoothstep(66, 100, Math.hypot(x, z)) : 0;
+    const height = Math.max(4, Math.min(WORLD_HEIGHT - 10, Math.floor(h * (1 - villageBlend) + 60 * villageBlend)));
 
     const temp = this.climate.fbm2(x * 0.0021 + 500, z * 0.0021 - 500, 3);
     const moist = this.climate.fbm2(x * 0.0025 - 900, z * 0.0025 + 900, 3);
@@ -291,6 +293,7 @@ export class TerrainGenerator {
     const rand = mulberry32((this.seed ^ Math.imul(cx, 0x632be5ab) ^ Math.imul(cz, 0x85157af5)) >>> 0);
     this.placeVeins(blocks, rand, B.COAL_ORE, 16, 7, 6, 90);
     this.placeVeins(blocks, rand, B.IRON_ORE, 9, 5, 4, 56);
+    this.placeVeins(blocks, rand, B.DIAMOND_ORE, 3, 4, 4, 22);
     this.placeVeins(blocks, rand, B.GRAVEL, 4, 10, 4, 70);
 
     // 5. Trees on a jittered grid so trunks never touch.
@@ -350,6 +353,7 @@ export class TerrainGenerator {
       }
     }
 
+    if (this.seed === SHOWCASE_SEED) buildShowcase(blocks, cx, cz);
     return blocks;
   }
 
@@ -469,3 +473,4 @@ export class TerrainGenerator {
     return { x: 0.5, y: h + 1, z: 0.5 };
   }
 }
+

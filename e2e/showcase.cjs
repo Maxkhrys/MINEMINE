@@ -1,0 +1,22 @@
+const { chromium } = require('playwright');
+const fs = require('fs');
+(async () => {
+const browser = await chromium.launch({ args: ['--no-sandbox','--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist'] });
+const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+const errors=[]; page.on('pageerror', e=>errors.push(e.message)); page.on('console', m=>{if(m.type()==='error'||m.text().includes('Shader compilation')) errors.push(m.text())});
+await page.goto(process.env.URL || 'http://127.0.0.1:5173/?debug');
+await page.waitForFunction(()=>window.__minemine?.state==='menu',null,{timeout:120000});
+await page.evaluate(()=>{const g=window.__minemine; g.input.forceLocked=true; Object.assign(g.settings,{renderDistance:6,resolutionScale:1,postprocessing:true,shadows:'high',ssao:true,bloom:true,antialias:true,clouds:true});g.applySettings(g.settings);});
+await page.click('#play-btn');
+await page.evaluate(()=>{const g=window.__minemine;g.player.x=37;g.player.y=85;g.player.z=57;g.player.yaw=.58;g.player.pitch=-.38;g.player.flying=true;});
+await page.keyboard.press('F1');
+await page.waitForTimeout(12000);
+fs.mkdirSync('e2e/screenshots',{recursive:true});
+await page.screenshot({path:'e2e/screenshots/hearthvale-day.png'});
+await page.keyboard.press('KeyL'); await page.waitForTimeout(2000);
+await page.screenshot({path:'e2e/screenshots/hearthvale-golden.png'});
+await page.keyboard.press('KeyL'); await page.waitForTimeout(2000);
+await page.screenshot({path:'e2e/screenshots/hearthvale-night.png'});
+console.log(JSON.stringify({errors, state:await page.evaluate(()=>({shaderError:window.__minemine.renderer.shaderError,columns:window.__minemine.world.columns.size,seed:window.__minemine.seedText}))}));
+await browser.close();
+})();
