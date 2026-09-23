@@ -26,6 +26,11 @@ export class Input {
 
   constructor(private canvas: HTMLCanvasElement) {
     window.addEventListener('keydown', (e) => {
+      // Typing recipe names must not open/close inventory or select hotbar slots.
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || (e.target instanceof HTMLElement && e.target.isContentEditable)) {
+        if (e.code === 'Escape') (e.target as HTMLElement).blur();
+        return;
+      }
       if (e.repeat) {
         if (this.captures(e)) e.preventDefault();
         return;
@@ -155,4 +160,3 @@ export class Input {
     this.pressed.clear();
   }
 }
-

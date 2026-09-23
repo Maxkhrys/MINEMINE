@@ -16,6 +16,7 @@ function fatal(title: string, message: string): void {
   // A UI instance without a game is enough to show the error screen.
   const ui = new UI(root, new Map(), {} as never, false, {
     onPlay: () => undefined,
+    onCloseInventory: () => undefined,
     onNewWorld: () => undefined,
     onResetWorld: () => undefined,
     onSettings: () => undefined,
@@ -55,3 +56,4 @@ function boot(): void {
 }
 
 boot();
+

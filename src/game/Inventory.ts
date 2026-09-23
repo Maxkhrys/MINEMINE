@@ -43,7 +43,7 @@ export class Inventory {
   }
 
   /** Adds items, filling existing stacks first (hotbar before main). Returns the leftover count. */
-  add(id: number, count: number): number {
+  add(id: number, count: number, durability?: number): number {
     if (!id || count <= 0) return 0;
     let left = count;
     const max = maxStackOf(id);
@@ -59,7 +59,7 @@ export class Inventory {
       if (!this.slots[i]) {
         const n = Math.min(left, max);
         const t = toolOf(id);
-        this.slots[i] = t ? { id, count: n, dur: t.durability } : { id, count: n };
+        this.slots[i] = t ? { id, count: n, dur: durability ?? t.durability } : { id, count: n };
         left -= n;
       }
     }
@@ -134,20 +134,13 @@ export class Inventory {
   /** Crafts once. Returns false when ingredients, station or space are missing. */
   craft(r: Recipe, stations: Set<Station>): boolean {
     if (!this.canCraft(r, stations)) return false;
-    if (this.mode === 'survival') {
-      const use = this.resolve(r)!;
-      for (const [id, n] of use) this.remove(id, n);
-      const left = this.add(r.out, r.count);
-      if (left > 0) {
-        // No room: undo.
-        this.remove(r.out, r.count - left);
-        for (const [id, n] of use) this.add(id, n);
-        this.changed();
-        return false;
-      }
-    } else {
-      this.add(r.out, r.count);
-    }
+    // Stage the entire transaction. Failed crafts never move stacks, reset
+    // durability, or emit an intermediate inventory state to the renderer.
+    const next = new Inventory(this.mode);
+    next.slots = this.slots.map(s => s ? { ...s } : null);
+    if (this.mode === 'survival') for (const [id, n] of this.resolve(r)!) next.remove(id, n);
+    if (next.add(r.out, r.count) > 0) return false;
+    this.slots = next.slots;
     this.changed();
     return true;
   }

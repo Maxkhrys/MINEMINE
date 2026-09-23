@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { pixelItemGeometry } from './pixelItem';
 import { blockDef } from '../world/blocks';
 import { buildItemGeometry } from './itemGeometry';
+import { toolOf } from '../game/items';
 
 /** First-person view of the selected block, rendered in its own small scene on top of the world. */
 export class HeldItem {
@@ -12,6 +13,7 @@ export class HeldItem {
   private currentId = -1;
   private swing = 0;
   private equip = 1;
+  private arm = new THREE.Group();
   private sun: THREE.DirectionalLight;
   private hemi: THREE.HemisphereLight;
   private geometries = new Map<number, THREE.BufferGeometry>();
@@ -26,6 +28,19 @@ export class HeldItem {
     this.sun = new THREE.DirectionalLight(0xfff0dc, 2.6);
     this.sun.position.set(0.6, 1, 0.4);
     this.scene.add(this.hemi, this.sun, this.holder);
+    const skin = new THREE.MeshLambertMaterial({ color: 0xdca77f });
+    const cuff = new THREE.MeshLambertMaterial({ color: 0xa9b4a0 });
+    const sleeve = new THREE.MeshLambertMaterial({ color: 0x425d4c });
+    const part = (w: number, h: number, d: number, y: number, material: THREE.Material) => {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+      mesh.position.y = y;
+      mesh.frustumCulled = false;
+      this.arm.add(mesh);
+    };
+    part(.17, .21, .19, .05, skin);
+    part(.18, .06, .2, -.085, cuff);
+    part(.185, .34, .205, -.28, sleeve);
+    this.holder.add(this.arm);
   }
 
   setItem(id: number): void {
@@ -36,6 +51,9 @@ export class HeldItem {
       this.mesh = null;
     }
     this.equip = 0;
+    this.arm.visible = true;
+    this.arm.position.set(id ? -.085 : -.025, id ? -.14 : -.06, .05);
+    this.arm.rotation.set(-.42, -.12, -.17);
     if (!id) return;
     if (id >= 256) {
       let mat = this.spriteMats.get(id);
@@ -48,9 +66,10 @@ export class HeldItem {
       if (!mat) return;
       this.mesh = new THREE.Mesh(this.geometries.get(id), mat);
       this.mesh.frustumCulled = false;
-      this.mesh.scale.setScalar(0.55);
-      this.mesh.rotation.set(-0.2, -0.9, 0.35);
-      this.mesh.position.set(0, 0.08, 0);
+      const tool = !!toolOf(id);
+      this.mesh.scale.setScalar(tool ? .79 : .47);
+      this.mesh.rotation.set(-.08, -.38, tool ? -.18 : .12);
+      this.mesh.position.set(tool ? .06 : -.035, tool ? .17 : .05, -.055);
       this.holder.add(this.mesh);
       return;
     }
@@ -74,27 +93,31 @@ export class HeldItem {
   }
 
   triggerSwing(): void {
-    this.swing = 1;
+    // Do not restart mid-stroke when dig sounds or break events arrive.
+    if (this.swing <= 0.03) this.swing = 1;
   }
 
   update(dt: number, aspect: number, bobPhase: number, bobAmount: number, brightness: number): void {
     this.camera.aspect = aspect;
     this.camera.updateProjectionMatrix();
-    this.swing = Math.max(0, this.swing - dt * 4.5);
+    this.swing = Math.max(0, this.swing - dt / .32);
     this.equip = Math.min(1, this.equip + dt * 5);
-    const s = Math.sin((1 - this.swing) * Math.PI) * (this.swing > 0 ? 1 : 0);
+    const t = 1 - this.swing;
+    const active = this.swing > 0 ? 1 : 0;
+    const arc = Math.sin(Math.sqrt(t) * Math.PI) * active;
+    const strike = Math.sin(t * Math.PI) * active;
+    const windup = Math.sin(t * Math.PI * 2) * active;
     const bx = Math.cos(bobPhase) * 0.018 * bobAmount;
     const by = -Math.abs(Math.sin(bobPhase)) * 0.022 * bobAmount;
     const drop = (1 - this.equip) * 0.35;
-    this.holder.position.set(0.56 + bx - s * 0.12, -0.46 + by - drop + s * 0.08, -0.9 - s * 0.14);
-    this.holder.rotation.set(-s * 0.7, -s * 0.3, s * 0.25);
+    this.holder.position.set(.46 + bx - arc * .32, -.43 + by - drop + windup * .09, -.8 - strike * .19);
+    this.holder.rotation.set(-strike * .9, -arc * .55, windup * .24 + strike * .38);
     const b = Math.max(0.15, Math.min(1, brightness));
     this.hemi.intensity = 1.6 * b;
     this.sun.intensity = 2.6 * b * b;
   }
 
   render(renderer: THREE.WebGLRenderer): void {
-    if (!this.mesh) return;
     const autoClear = renderer.autoClear;
     renderer.autoClear = false;
     renderer.setRenderTarget(null);
@@ -103,4 +126,3 @@ export class HeldItem {
     renderer.autoClear = autoClear;
   }
 }
-
