@@ -436,8 +436,11 @@ export class Game {
         this.openInventory();
         return;
       }
-      if (pressed.has('Escape') && this.input.forceLocked) {
-        this.pause();
+      if (pressed.has('Escape')) {
+        // Browsers normally release the pointer themselves on Esc; make sure it happens
+        // even when the key reaches the page, then pause via the lock-change event.
+        if (this.input.forceLocked) this.pause();
+        else this.input.exitLock();
         return;
       }
       if (this.mode === 'creative') {

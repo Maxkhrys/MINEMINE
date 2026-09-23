@@ -20,6 +20,9 @@ export class Input {
   forceLocked = false;
   private lockListeners: ((locked: boolean) => void)[] = [];
   private lockErrorListeners: (() => void)[] = [];
+  /** Raw (unaccelerated) mouse input is optional; remember when the platform refuses it. */
+  private rawSupported = true;
+  private requesting = false;
 
   constructor(private canvas: HTMLCanvasElement) {
     window.addEventListener('keydown', (e) => {
@@ -75,6 +78,8 @@ export class Input {
       for (const fn of this.lockListeners) fn(locked);
     });
     document.addEventListener('pointerlockerror', () => {
+      // Errors from a promise-based request are reported through requestLock() instead.
+      if (this.requesting) return;
       for (const fn of this.lockErrorListeners) fn();
     });
   }
@@ -102,18 +107,30 @@ export class Input {
   async requestLock(): Promise<boolean> {
     if (this.forceLocked) return true;
     if (document.pointerLockElement === this.canvas) return true;
-    try {
-      const req = this.canvas.requestPointerLock({ unadjustedMovement: true } as never) as unknown as Promise<void> | undefined;
+    const request = async (raw: boolean): Promise<void> => {
+      const req = (raw ? this.canvas.requestPointerLock({ unadjustedMovement: true } as never) : this.canvas.requestPointerLock()) as unknown as
+        | Promise<void>
+        | undefined;
+      // Older browsers return nothing and report the outcome through events only.
       if (req && typeof req.then === 'function') await req;
+    };
+    this.requesting = true;
+    try {
+      if (this.rawSupported) {
+        try {
+          await request(true);
+          return true;
+        } catch (err) {
+          if ((err as Error)?.name !== 'NotSupportedError') return false;
+          this.rawSupported = false;
+        }
+      }
+      await request(false);
       return true;
     } catch {
-      try {
-        const req = this.canvas.requestPointerLock() as unknown as Promise<void> | undefined;
-        if (req && typeof req.then === 'function') await req;
-        return true;
-      } catch {
-        return false;
-      }
+      return false;
+    } finally {
+      this.requesting = false;
     }
   }
 

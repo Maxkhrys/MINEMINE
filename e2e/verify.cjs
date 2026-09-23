@@ -335,6 +335,43 @@ const frames = (page, n = 2) => page.evaluate((n) => new Promise((r) => { let k 
   const invClosed = await page.evaluate(() => ({ s: window.__minemine.state, open: window.__minemine.ui.inventoryOpen }));
   check('E opens and closes the inventory', invOpen.s === 'inventory' && invOpen.open && invClosed.s === 'playing' && !invClosed.open, `${JSON.stringify(invOpen)} → ${JSON.stringify(invClosed)}`);
 
+  // ---------- real pointer lock (no test hook)
+  await page.keyboard.press('Escape');
+  await frames(page, 2);
+  await page.evaluate(() => { window.__minemine.input.forceLocked = false; });
+  await page.click('#play-btn');
+  await page.waitForTimeout(1000);
+  const lk1 = await page.evaluate(() => ({ locked: document.pointerLockElement?.id ?? null, state: window.__minemine.state }));
+  await page.evaluate(() => {
+    const g = window.__minemine; const p = g.player;
+    p.pitch = 0; p.yaw = 0;
+    g.world.setBlock(Math.floor(p.x), Math.floor(p.y + 1.62), Math.floor(p.z) - 2, 11);
+    g.chunks.flushUrgent();
+  });
+  await frames(page, 2);
+  const tLock = await page.evaluate(() => window.__minemine.target && [window.__minemine.target.x, window.__minemine.target.y, window.__minemine.target.z]);
+  let minedLocked = null;
+  if (tLock) {
+    await page.mouse.down(); await frames(page, 1); await page.mouse.up(); await frames(page, 1);
+    minedLocked = await page.evaluate((t) => window.__minemine.world.getBlock(t[0], t[1], t[2]), tLock);
+  }
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(600);
+  const lk2 = await page.evaluate(() => ({ locked: document.pointerLockElement?.id ?? null, state: window.__minemine.state }));
+  await page.waitForTimeout(1500);
+  await page.click('#play-btn');
+  await page.waitForTimeout(1000);
+  await page.keyboard.press('KeyE');
+  await page.waitForTimeout(800);
+  const lk3 = await page.evaluate(() => ({ locked: document.pointerLockElement?.id ?? null, state: window.__minemine.state }));
+  await page.keyboard.press('KeyE');
+  await page.waitForTimeout(2000);
+  const lk4 = await page.evaluate(() => ({ locked: document.pointerLockElement?.id ?? null, state: window.__minemine.state }));
+  check('Real pointer lock: Play captures, Esc releases and pauses, E toggles inventory',
+    lk1.locked === 'game' && lk1.state === 'playing' && lk2.locked === null && lk2.state === 'menu' && lk3.locked === null && lk3.state === 'inventory' && lk4.locked === 'game' && lk4.state === 'playing',
+    JSON.stringify([lk1, lk2, lk3, lk4]));
+  check('Mining works with the real pointer lock', !!tLock && minedLocked === 0, `target ${JSON.stringify(tLock)} → ${minedLocked}`);
+
   // ---------- 9. console
   const bad = logs.filter((l) => /\[(error|pageerror)\]/.test(l) || /\[warning\].*(WebGL|Shader|GL_)/i.test(l));
   check('No errors or WebGL warnings in the console', bad.length === 0, bad.slice(0, 5).join(' | '));

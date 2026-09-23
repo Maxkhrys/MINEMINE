@@ -18,6 +18,7 @@ Other scripts:
 | `npm run build` | Type-check and build a static site into `dist/` |
 | `npm run preview` | Serve the production build (http://localhost:4173) |
 | `npm test` | Unit tests (raycast, world storage, meshing, terrain generation) |
+| `npm run verify` | 28 end-to-end checks in headless Chromium against a running `npm run dev` (run `npx playwright install chromium` once) |
 | `npm run typecheck` | TypeScript only |
 
 Add `?safe` to the URL to start with every optional graphics effect disabled.

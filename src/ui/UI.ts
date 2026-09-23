@@ -64,7 +64,6 @@ export class UI {
   private inv: Inventory | null = null;
   private cursor: Stack | null = null;
   private hovered = -1;
-  private invSlotEls: HTMLDivElement[] = [];
 
   constructor(
     root: HTMLElement,
@@ -620,7 +619,6 @@ export class UI {
     if (!inv) return;
     const creative = inv.mode === 'creative';
     clear(this.invPanel);
-    this.invSlotEls = [];
     const name = (i: number) => () => (inv.slots[i] ? blockDef(inv.slots[i]!.id).name : null);
     const main = h('div', { class: 'inv-grid' });
     if (creative) {
@@ -629,16 +627,13 @@ export class UI {
       });
     } else {
       for (let i = HOTBAR_SIZE; i < INVENTORY_SIZE; i++) {
-        const el = this.slotEl(i, inv.slots[i], false, (e) => this.clickSlot(i, e), name(i));
-        this.invSlotEls[i] = el;
-        main.append(el);
+        main.append(this.slotEl(i, inv.slots[i], false, (e) => this.clickSlot(i, e), name(i)));
       }
     }
     const bar = h('div', { class: 'inv-grid' });
     for (let i = 0; i < HOTBAR_SIZE; i++) {
       const el = this.slotEl(i, inv.slots[i], creative, (e) => this.clickSlot(i, e), name(i));
       if (i === inv.selected) el.classList.add('active');
-      this.invSlotEls[i] = el;
       bar.append(el);
     }
     this.invPanel.append(
