@@ -7,6 +7,8 @@ import { World } from '../src/world/World';
 import { columnIndex } from '../src/world/constants';
 import { Player } from '../src/game/Player';
 import { MobManager } from '../src/game/Mobs';
+import * as THREE from 'three';
+import { AdventureEffects } from '../src/render/AdventureEffects';
 import { buildVillages } from '../src/world/villages';
 function setup(){const world=new World(),a=new Adventure(world);for(let cz=-1;cz<=1;cz++)for(let cx=-1;cx<=1;cx++){const b=new Uint8Array(32768);for(let z=0;z<16;z++)for(let x=0;x<16;x++)b[columnIndex(x,20,z)]=B.STONE;world.addColumn(cx,cz,b);}return {world,a};}
 describe('survival workstations and storage',()=>{
@@ -19,6 +21,7 @@ describe('survival workstations and storage',()=>{
  it('round-trips furnace, equipment, backpack and grave through old version save data',()=>{const {a,world}=setup();world.setBlock(3,21,3,B.FURNACE);const c=a.container(3,21,3);c.slots[0]={id:I.RAW_FISH,count:1};c.slots[1]={id:I.COAL,count:1};a.update(2,0,21,0,true);a.data.backpack[0]={id:I.BOW,count:1,dur:5};const raw=JSON.parse(JSON.stringify(a.data));a.reset(raw);expect(a.data.backpack[0]?.dur).toBe(5);expect(a.data.containers[positionKey(3,21,3)].progress).toBeCloseTo(2);});
 });
 describe('farming and useful block physics',()=>{
+ it('stops arrows at cover before a creature behind it',()=>{const {world,a}=setup(),mobs=new MobManager(world),player=new Player(world);player.x=4;player.y=21;player.z=9;const cow=mobs.spawn('cow',4.5,21,3.5);const effects=new AdventureEffects(world,a,new Map(),new THREE.Scene());world.setBlock(4,21,5,B.STONE);effects.shoot(4.5,21.8,8,0,0,-1,30,12);for(let i=0;i<30;i++)effects.update(1/60,player,mobs,(m,n)=>m.health-=n,()=>{});expect(cow.health).toBe(10);world.setBlock(4,21,5,B.AIR);effects.shoot(4.5,21.8,8,0,0,-1,30,12);for(let i=0;i<30;i++)effects.update(1/60,player,mobs,(m,n)=>m.health-=n,()=>{});expect(cow.health).toBeLessThanOrEqual(0);effects.clear();mobs.clear();});
  it('runs workstation clocks in real time without enlarging physics steps',()=>{const {world,a}=setup();world.setBlock(4,21,4,B.FURNACE);const c=a.container(4,21,4);c.slots[0]={id:I.RAW_FISH,count:1};c.slots[1]={id:I.COAL,count:1};for(let i=0;i<10;i++)a.update(.1,0,21,0,true,.5);expect(c.slots[2]?.id).toBe(I.COOKED_FISH);expect(a.data.clock).toBeCloseTo(185);});
  it('requires irrigation and advances all crop stages over 72 seconds',()=>{const {a,world}=setup();world.setBlock(4,20,4,B.FARMLAND);world.setBlock(4,21,4,B.CROP_0);for(let i=0;i<30;i++)a.update(1,0,21,0,true);expect(world.getBlock(4,21,4)).toBe(B.CROP_0);world.setBlock(5,20,4,B.WATER);for(let i=0;i<72;i++)a.update(1,0,21,0,true);expect(world.getBlock(4,21,4)).toBe(B.CROP_3);});
  it('lands on the actual top of a bed and passes through an open door',()=>{const {world}=setup();world.setBlock(4,21,4,B.BED);const p=new Player(world);p.x=4.5;p.z=4.5;p.y=24;p.peakY=24;const idle={forward:0,strafe:0,jump:false,down:false,sprint:false};for(let i=0;i<120;i++)p.update(1/60,idle,false);expect(p.y).toBeCloseTo(21.55,2);world.setBlock(8,21,5,B.DOOR_OPEN);world.setBlock(8,22,5,B.DOOR_TOP_OPEN);p.x=8.5;p.z=7;p.y=21;p.yaw=0;for(let i=0;i<45;i++)p.update(1/60,{...idle,forward:1},false);expect(p.z).toBeLessThan(5);});
