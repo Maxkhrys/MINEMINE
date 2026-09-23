@@ -303,7 +303,7 @@ vec3 waterNormal(vec2 p, float t, float fade) {
 }
 `;
 
-/** Water: depth-tinted body, fresnel sky reflection, sun glints, shore foam and soft block edges. */
+/** Water: depth-tinted body, filtered waves, fresnel reflections, sun glints and shore foam. */
 export function createWaterMaterial(env: EnvUniforms): THREE.MeshLambertMaterial {
   const mat = new THREE.MeshLambertMaterial({
     color: 0xffffff,
@@ -389,7 +389,7 @@ export function createWaterMaterial(env: EnvUniforms): THREE.MeshLambertMaterial
       )
       .replace('#include <fog_fragment>', '');
   };
-  mat.customProgramCacheKey = () => 'voxel-water';
+  mat.customProgramCacheKey = () => 'voxel-water-filtered-v2';
   return mat;
 }
 

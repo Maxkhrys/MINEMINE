@@ -243,7 +243,8 @@ export class GameRenderer {
     this.env.uTime.value = time;
     this.env.uUnderwater.value = underwater ? 1 : 0;
     this.sky.position.copy(this.camera.position);
-    if (this.sun.castShadow) this.updateShadowCamera(this.camera.position);
+    // Keep the same sun direction when the low preset disables shadow maps.
+    this.updateShadowCamera(this.camera.position);
 
     if (this.usePost && this.post) {
       try {
