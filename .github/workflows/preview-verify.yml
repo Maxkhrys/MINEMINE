@@ -1,0 +1,31 @@
+name: Preview verification
+on:
+  push:
+    branches: [astra/living-world-overhaul]
+  pull_request:
+    branches: [claude/voxel-sandbox-game-9rpgaa]
+permissions:
+  contents: read
+concurrency:
+  group: preview-verify-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Package reproducible review workspace
+        run: tar --exclude=.git --exclude=node_modules/.cache -czf /tmp/minemine-review-workspace.tgz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: minemine-review-workspace
+          path: /tmp/minemine-review-workspace.tgz
+          retention-days: 1
