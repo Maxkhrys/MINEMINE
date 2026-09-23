@@ -12,6 +12,9 @@ export class HeldItem {
   private mesh: THREE.Mesh | null = null;
   private currentId = -1;
   private swing = 0;
+  use:'none'|'eat'|'bow'|'block'='none';
+  useProgress=0;
+  private offhand=new THREE.Group();
   private equip = 1;
   private arm = new THREE.Group();
   private sun: THREE.DirectionalLight;
@@ -41,6 +44,8 @@ export class HeldItem {
     part(.17, .05, .19, -.06, cuff);
     part(.175, .32, .195, -.245, sleeve);
     this.holder.add(this.arm);
+    const shield=new THREE.Mesh(new THREE.BoxGeometry(.4,.52,.065),new THREE.MeshLambertMaterial({color:0x826643}));
+    const rim=new THREE.Mesh(new THREE.BoxGeometry(.46,.58,.045),new THREE.MeshLambertMaterial({color:0xb5bdb5}));rim.position.z=.035;this.offhand.add(rim,shield);this.offhand.position.set(-.5,-.36,-.82);this.offhand.rotation.y=.25;this.scene.add(this.offhand);this.offhand.visible=false;
   }
 
   setItem(id: number): void {
@@ -112,6 +117,9 @@ export class HeldItem {
     const drop = (1 - this.equip) * 0.35;
     this.holder.position.set(.46 + bx - arc * .32, -.43 + by - drop + windup * .09, -.8 - strike * .19);
     this.holder.rotation.set(-strike * .9, -arc * .55, windup * .24 + strike * .38);
+    this.offhand.visible=this.use==='block';
+    if(this.use==='eat'){const chew=Math.sin(this.useProgress*32);this.holder.position.set(.08+chew*.018,-.25+Math.abs(chew)*.06,-.57);this.holder.rotation.set(.15,0,-.55+chew*.1);}
+    if(this.use==='bow'){this.holder.position.set(.1,-.28,-.82+this.useProgress*.13);this.holder.rotation.set(0,-.15,-.28);}
     const b = Math.max(0.15, Math.min(1, brightness));
     this.hemi.intensity = 1.6 * b;
     this.sun.intensity = 2.6 * b * b;

@@ -156,7 +156,12 @@ export class Sfx {
     for (let i = 0; i < 3; i++) setTimeout(() => this.burst('grass', 0.07, 0.35, 0.5 + Math.random() * 0.3), i * 110);
   }
 
-  mob(kind: 'pig' | 'cow' | 'chicken', hurt = false): void {
+  mob(kind: string, hurt = false): void {
+    if(kind==='fish'){if(hurt)this.splash();return;}
+    if(kind==='bird'){this.tone([1800,2400],.13,.045,'sine');return;}
+    if(kind==='skeleton'){this.burst('stone',.1,.2,1.6);return;}
+    if(kind==='zombie'){this.tone([95,72],.45,.12,'sawtooth');return;}
+    if(kind==='villager'){this.tone([210,175],.22,.1,'triangle');return;}
     const base = kind === 'pig' ? 240 : kind === 'cow' ? 130 : 900;
     const f = base * (hurt ? 1.3 : 0.9 + Math.random() * 0.2);
     if (kind === 'chicken') {
@@ -171,3 +176,4 @@ export class Sfx {
     this.burst('wood', 0.12, 0.5, 0.9);
   }
 }
+

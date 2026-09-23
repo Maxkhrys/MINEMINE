@@ -1,4 +1,4 @@
-import { isWater } from '../world/blocks';
+import { isWater, isLadder, blockDef } from '../world/blocks';
 import type { World } from '../world/World';
 
 export const PLAYER_WIDTH = 0.6;
@@ -90,7 +90,10 @@ export class Player {
     for (let y = Math.floor(b[1] + EPS); y <= Math.floor(b[4] - EPS); y++) {
       for (let z = Math.floor(b[2] + EPS); z <= Math.floor(b[5] - EPS); z++) {
         for (let x = Math.floor(b[0] + EPS); x <= Math.floor(b[3] - EPS); x++) {
-          if (this.world.isSolidForCollision(x, y, z)) return true;
+          if (this.world.isSolidForCollision(x, y, z)) {
+            const q=blockDef(this.world.getBlock(x,y,z)).box??[0,0,0,1,1,1];
+            if(b[0]<x+q[3]-EPS&&b[3]>x+q[0]+EPS&&b[1]<y+q[4]-EPS&&b[4]>y+q[1]+EPS&&b[2]<z+q[5]-EPS&&b[5]>z+q[2]+EPS)return true;
+          }
         }
       }
     }
@@ -104,42 +107,16 @@ export class Player {
 
   /** Moves along one axis, stopping at the first solid voxel face. Returns the distance moved. */
   private moveAxis(axis: 0 | 1 | 2, d: number): number {
-    if (d === 0) return 0;
-    const b = this.bounds();
-    const min = [b[0], b[1], b[2]];
-    const max = [b[3], b[4], b[5]];
-    const a1 = axis === 0 ? 1 : 0;
-    const a2 = axis === 2 ? 1 : 2;
-    const lo1 = Math.floor(min[a1] + EPS);
-    const hi1 = Math.floor(max[a1] - EPS);
-    const lo2 = Math.floor(min[a2] + EPS);
-    const hi2 = Math.floor(max[a2] - EPS);
-    const c = [0, 0, 0];
-    const solidSlice = (k: number): boolean => {
-      c[axis] = k;
-      for (let i = lo1; i <= hi1; i++) {
-        c[a1] = i;
-        for (let j = lo2; j <= hi2; j++) {
-          c[a2] = j;
-          if (this.world.isSolidForCollision(c[0], c[1], c[2])) return true;
-        }
-      }
-      return false;
-    };
-    if (d > 0) {
-      const start = Math.ceil(max[axis] - EPS);
-      const end = Math.ceil(max[axis] + d) - 1;
-      for (let k = start; k <= end; k++) {
-        if (solidSlice(k)) return Math.max(0, k - max[axis] - 1e-7);
-      }
-    } else {
-      const start = Math.floor(min[axis] + EPS) - 1;
-      const end = Math.floor(min[axis] + d);
-      for (let k = start; k >= end; k--) {
-        if (solidSlice(k)) return Math.min(0, k + 1 - min[axis] + 1e-7);
-      }
-    }
-    return d;
+    if(d===0)return 0;
+    const b=this.bounds(),lo=b.slice(0,3),hi=b.slice(3),a1=(axis+1)%3,a2=(axis+2)%3;
+    lo[axis]+=Math.min(0,d);hi[axis]+=Math.max(0,d);let move=d;
+    for(let x=Math.floor(lo[0]+EPS);x<=Math.floor(hi[0]-EPS);x++)for(let y=Math.floor(lo[1]+EPS);y<=Math.floor(hi[1]-EPS);y++)for(let z=Math.floor(lo[2]+EPS);z<=Math.floor(hi[2]-EPS);z++){
+      if(!this.world.isSolidForCollision(x,y,z))continue;
+      const q=blockDef(this.world.getBlock(x,y,z)).box??[0,0,0,1,1,1],o=[x,y,z];
+      if(b[a1+3]<=o[a1]+q[a1]+EPS||b[a1]>=o[a1]+q[a1+3]-EPS||b[a2+3]<=o[a2]+q[a2]+EPS||b[a2]>=o[a2]+q[a2+3]-EPS)continue;
+      if(d>0){const gap=o[axis]+q[axis]-b[axis+3];if(gap>=-EPS&&gap<move)move=Math.max(0,gap-1e-7);}
+      else{const gap=o[axis]+q[axis+3]-b[axis];if(gap<=EPS&&gap>move)move=Math.min(0,gap+1e-7);}
+    }return move;
   }
 
   private checkWater(): void {
@@ -214,6 +191,10 @@ export class Player {
       }
     }
 
+    let ladder=false;
+    for(let lx=Math.floor(this.x-.35);lx<=Math.floor(this.x+.35);lx++)for(let lz=Math.floor(this.z-.35);lz<=Math.floor(this.z+.35);lz++)
+      for(let ly=Math.floor(this.y);ly<=Math.floor(this.y+this.height);ly++)if(isLadder(this.world.getBlock(lx,ly,lz)))ladder=true;
+    if(ladder&&!this.flying){this.vy=input.sneak?0:input.jump||input.forward>0?3.2:Math.max(-1.5,this.vy);this.peakY=this.y;this.lastFall=0;}
     // Sweep one axis at a time: vertical first, then horizontal.
     const wantY = this.vy * dt;
     const dy = this.moveAxis(1, wantY);

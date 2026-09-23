@@ -23,7 +23,7 @@ export function buildItemGeometry(id: number): THREE.BufferGeometry {
       [0, 1],
     ];
     for (let i = 0; i < 4; i++) {
-      pos.push(corners[i][0] - 0.5, corners[i][1] - 0.5, corners[i][2] - 0.5);
+      pos.push(def.box[0] + corners[i][0]*(def.box[3]-def.box[0]) - .5, def.box[1] + corners[i][1]*(def.box[4]-def.box[1]) - .5, def.box[2] + corners[i][2]*(def.box[5]-def.box[2]) - .5);
       nor.push(n[0] * 127, n[1] * 127, n[2] * 127);
       uv.push(uvs[i][0] * 255, uvs[i][1] * 255);
       data.push(layer, 255, 255, flags);
@@ -71,3 +71,4 @@ export function buildItemGeometry(id: number): THREE.BufferGeometry {
   g.computeBoundingSphere();
   return g;
 }
+

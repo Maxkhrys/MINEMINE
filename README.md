@@ -1,4 +1,8 @@
-# The Workshop Update
+# MINEMINE — Adventure update
+
+Working furnaces, persistent storage, fish and birds, villages and survival progression. See the Adventure update controls and systems below. Existing saves remain compatible.
+
+## Previous: The Workshop Update
 
 MINEMINE now has a cohesive stone-and-moss interface, a live-world title screen,
 a searchable Creative inventory, and a station-aware recipe book. Existing saves
@@ -204,15 +208,20 @@ src/
 tests/                 Vitest unit tests
 ```
 
-## Known limitations
+## Adventure update
 
-- Only passive animals, no hostile mobs. Drops go straight into your inventory
-  (no item entities). Recipes are shapeless (a list, not a grid). Animals aren't
-  saved, and new ones spawn around you after a reload.
-- The sun is fixed in the afternoon (no day/night cycle). Glow lamps glow and
-  bloom, but they don't light up nearby blocks (no block-light propagation).
-  Sky light is approximated from heightmaps.
-- Water spread is simple and bounded. There are no flowing water levels.
-- Saves live in this browser's `localStorage`, which limits them to a few MB of edits.
-- Browsers make you click to capture the mouse. After pressing `Esc`, some
-  browsers wait about a second before they allow it again.
+- Right-click furnaces for input, fuel and output. Coal burns for 80 seconds; wood and sticks also work. Each batch takes 5 seconds. Furnaces, chests and backpacks save their contents and partial progress.
+- Press **B** for a crafted travel backpack, **O** for armour/shield equipment, **J** for discoveries, village requests, milestones and the Keep Inventory option. In storage, click a stack to transfer it or right-click for one.
+- Hold right-click to eat. Hold and release right-click with a bow to shoot; arrows follow gravity and stop at blocks. Hold **R** with a shield equipped; raising it just before impact parries. **Q** drops an item.
+- Hoe dirt or grass, plant seeds, and supply water within four blocks. Craft a bucket from three iron ingots to move water. Wheat matures over 72 seconds in loaded, irrigated fields; harvest for wheat and seeds.
+- Feed two nearby adult cows/pigs wheat, or chickens seeds, to breed. Babies grow in 90 seconds. Parents have a three-minute cooldown.
+- Right-click beds to set respawn. At night, beds skip to morning if enemies are not nearby. A day lasts 20 minutes. Zombies and skeleton archers spawn at night.
+- Village noticeboards and traders offer trades plus gathering, building and scout rescue requests. New settlements generate in suitable dry terrain across seeded worlds. Hearthvale has furnished homes and a public wheat farm.
+- Death can place inventory, backpack contents and equipped gear into a recoverable world backpack. Coordinates appear in the journal. Existing saves retain their prior Keep Inventory behaviour; change it in the journal.
+- Doors, gates and ladders work; beds and chests use their actual collision shapes. Fish swim in water and birds fly around terrain. Mining and creatures drop physical, collectible items.
+
+## Persistence and limits
+
+Saves stay in this browser's `localStorage`, including container contents, equipment, farming progress, world drops and animals. Existing version-1 saves load without conversion. Simulation pauses at the menu; loaded furnaces and farms continue while an inventory screen is open. There is no offline progress or multiplayer server.
+
+Crafting uses an ingredient recipe book with grid previews. Light uses sun/sky lighting and a limited set of local effects rather than full block-light propagation. Water spread has bounded flowing levels. Browser storage has a quota; the game reports save failures. New villages appear through terrain generation, while saved block edits retain priority.

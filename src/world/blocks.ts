@@ -42,6 +42,7 @@ export const TILE_NAMES = [
   'stone_bricks',
   'diamond_ore',
   'campfire',
+  'chest_front', 'chest_top', 'furnace_lit', 'bed_top', 'bed_side', 'door', 'gate', 'ladder', 'farmland', 'crop_young', 'crop_mid', 'crop_tall', 'crop_ripe', 'grave', 'village_post',
 ] as const;
 
 export type TileName = (typeof TILE_NAMES)[number];
@@ -85,6 +86,14 @@ export const B = {
   FLOW_1: 31,
   FLOW_7: 37,
   FALLING_WATER: 38,
+  CHEST: 39, FURNACE_LIT: 40, BED: 41,
+  DOOR: 42, DOOR_TOP: 43, DOOR_OPEN: 44, DOOR_TOP_OPEN: 45,
+  GATE: 46, GATE_OPEN: 47, LADDER: 48, FARMLAND: 49,
+  CROP_0: 50, CROP_1: 51, CROP_2: 52, CROP_3: 53,
+  GRAVE: 54, VILLAGE_POST: 55,
+  DOOR_X: 56, DOOR_TOP_X: 57, DOOR_OPEN_X: 58, DOOR_TOP_OPEN_X: 59,
+  GATE_X: 60, GATE_OPEN_X: 61, LADDER_X: 62, BED_FOOT: 63,
+
 } as const;
 
 export type RenderKind = 'none' | 'solid' | 'cutout' | 'plant' | 'water';
@@ -349,6 +358,35 @@ BLOCKS[B.WATER].placeable = true;
 for (let id = B.FLOW_1; id <= B.FALLING_WATER; id++) reg({ ...BLOCKS[B.WATER], id, placeable: false });
 export function isWater(id: number): boolean { return id === B.WATER || (id >= B.FLOW_1 && id <= B.FALLING_WATER); }
 export function waterLevel(id: number): number { return id === B.WATER || id === B.FALLING_WATER ? 0 : id - B.FLOW_1 + 1; }
+reg(solid(B.CHEST, { name: 'Chest', faces: pillar('chest_front', 'chest_top'), hardness: 1.4, sound: 'wood', tool: 'axe', opaque: false, box: [.05,0,.05,.95,.88,.95] }));
+reg({ ...BLOCKS[B.FURNACE], id: B.FURNACE_LIT, name: 'Burning Furnace', drop: B.FURNACE, placeable: false, emissive: true, faces: [tile('furnace_side'),tile('furnace_side'),tile('furnace_top'),tile('furnace_top'),tile('furnace_lit'),tile('furnace_side')] });
+reg(solid(B.BED, { name: 'Bed', faces: pillar('bed_side', 'bed_top'), hardness: .4, tool: 'axe', sound: 'wood', opaque: false, box: [0,0,0,1,.55,1] }));
+reg({ ...BLOCKS[B.BED], id: B.BED_FOOT, placeable: false, drop: B.BED, faces: pillar('bed_side', 'bed_side') });
+for (const [base, top, opened, topOpen, axis] of [[B.DOOR,B.DOOR_TOP,B.DOOR_OPEN,B.DOOR_TOP_OPEN,0],[B.DOOR_X,B.DOOR_TOP_X,B.DOOR_OPEN_X,B.DOOR_TOP_OPEN_X,1]]) {
+  const box: BlockDef['box'] = axis ? [.0,0,0,.16,1,1] : [0,0,.0,1,1,.16];
+  const openBox: BlockDef['box'] = axis ? [0,0,0,1,1,.16] : [0,0,0,.16,1,1];
+  reg(solid(base, { name: 'Oak Door', faces: all('door'), opaque: false, skyBlocking: false, sound: 'wood', tool: 'axe', hardness: .8, drop: B.DOOR, placeable: base === B.DOOR, box }));
+  reg({ ...BLOCKS[base], id: top, placeable: false, drop: 0 });
+  reg({ ...BLOCKS[base], id: opened, solid: false, placeable: false, box: openBox });
+  reg({ ...BLOCKS[top], id: topOpen, solid: false, box: openBox });
+}
+for (const [id, opened, axis] of [[B.GATE,B.GATE_OPEN,0],[B.GATE_X,B.GATE_OPEN_X,1]]) {
+  reg(solid(id, { name: 'Fence Gate', faces: all('gate'), render: 'cutout', opaque: false, skyBlocking: false, sound: 'wood', tool: 'axe', hardness: .6, drop: B.GATE, placeable: id === B.GATE, box: axis ? [.38,0,0,.62,1,1] : [0,0,.38,1,1,.62] }));
+  reg({ ...BLOCKS[id], id: opened, solid: false, placeable: false, box: axis ? [0,0,0,1,1,.18] : [0,0,0,.18,1,1] });
+}
+reg(solid(B.LADDER, { name: 'Ladder', faces: all('ladder'), render: 'cutout', solid: false, opaque: false, skyBlocking: false, sound: 'wood', tool: 'axe', hardness: .3, box: [0,0,.42,1,1,.58] }));
+reg({ ...BLOCKS[B.LADDER], id: B.LADDER_X, placeable: false, drop: B.LADDER, box: [.42,0,0,.58,1,1] });
+reg(solid(B.FARMLAND, { name: 'Tilled Soil', faces: pillar('dirt','farmland'), tool: 'shovel', sound: 'dirt', hardness: .5, drop: B.DIRT, placeable: false }));
+for (let stage = 0; stage < 4; stage++) reg({ ...plant(B.CROP_0 + stage, stage === 3 ? 'Ripe Wheat' : 'Growing Wheat', (['crop_young','crop_mid','crop_tall','crop_ripe'] as TileName[])[stage]), placeable: false, replaceable: false, drop: stage === 3 ? 291 : 290, tint: false, box: [.15,0,.15,.85,.3+stage*.22,.85] });
+reg(solid(B.GRAVE, { name: 'Recovery Backpack', faces: all('grave'), hardness: Infinity, drop: 0, placeable: false, opaque: false, box: [.15,0,.15,.85,.75,.85], sound: 'wood' }));
+reg(solid(B.VILLAGE_POST, { name: 'Village Noticeboard', faces: all('village_post'), hardness: 1, tool: 'axe', sound: 'wood', placeable: false, drop: B.OAK_PLANKS }));
+export const isFurnace = (id: number): boolean => id === B.FURNACE || id === B.FURNACE_LIT;
+export const isCrop = (id: number): boolean => id >= B.CROP_0 && id <= B.CROP_3;
+export const isDoor = (id: number): boolean => (id >= B.DOOR && id <= B.DOOR_TOP_OPEN) || (id >= B.DOOR_X && id <= B.DOOR_TOP_OPEN_X);
+export const doorBottom = (id: number): number => id >= B.DOOR_X ? B.DOOR_X : B.DOOR;
+export const isGate = (id: number): boolean => [B.GATE,B.GATE_OPEN,B.GATE_X,B.GATE_OPEN_X].includes(id as never);
+export const isLadder = (id: number): boolean => id === B.LADDER || id === B.LADDER_X;
+export const isBed = (id: number): boolean => id === B.BED || id === B.BED_FOOT;
 export const BLOCK_COUNT = BLOCKS.length;
 
 // Fast lookup tables used in hot loops (meshing, physics, raycasting).
@@ -394,7 +432,7 @@ export const PALETTE: number[] = [
   B.IRON_ORE,
   B.GLOW_LAMP,
   B.CRAFTING_TABLE,
-  B.FURNACE,
+  B.FURNACE, B.CHEST, B.BED, B.DOOR, B.GATE, B.LADDER,
   B.STONE_BRICKS,
   B.DIAMOND_ORE,
   B.CAMPFIRE,
@@ -409,6 +447,6 @@ export function blockDef(id: number): BlockDef {
 }
 
 export function canSupportPlant(id: number): boolean {
-  return id === B.GRASS || id === B.DIRT || id === B.SNOWY_GRASS;
+  return id === B.GRASS || id === B.DIRT || id === B.SNOWY_GRASS || id === B.FARMLAND;
 }
 

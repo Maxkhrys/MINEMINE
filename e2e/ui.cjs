@@ -37,7 +37,7 @@ const assert = require('node:assert/strict');
   assert.equal(await page.evaluate(() => window.__minemine.state), 'inventory', 'Typing does not close the inventory or switch slots');
   await page.locator('#item-search').fill('');
   await page.getByRole('button', { name: 'Tools', exact: true }).click();
-  assert.equal(await page.locator('.catalog-grid .slot').count(), 16);
+  assert.equal(await page.locator('.catalog-grid .slot').count(), 17);
   await shot('workshop-tools');
   await page.getByRole('button', { name: 'Diamond Pickaxe', exact: true }).click({ modifiers: ['Shift'] });
   assert.ok(await page.evaluate(() => window.__minemine.inventory.slots.slice(0,9).some(s => s?.id === 272)));

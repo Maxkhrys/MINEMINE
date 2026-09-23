@@ -1,5 +1,5 @@
 import { B } from '../world/blocks';
-import { I, isValidItem, maxStackOf, toolOf, type Recipe, type Station } from './items';
+import { I, durabilityOf, isValidItem, maxStackOf, toolOf, type Recipe, type Station } from './items';
 
 export interface Stack {
   id: number;
@@ -58,8 +58,8 @@ export class Inventory {
     for (let i = 0; i < INVENTORY_SIZE && left > 0; i++) {
       if (!this.slots[i]) {
         const n = Math.min(left, max);
-        const t = toolOf(id);
-        this.slots[i] = t ? { id, count: n, dur: durability ?? t.durability } : { id, count: n };
+        const d = durabilityOf(id);
+        this.slots[i] = d ? { id, count: n, dur: durability ?? d } : { id, count: n };
         left -= n;
       }
     }
@@ -81,9 +81,9 @@ export class Inventory {
   wearSelected(): boolean {
     if (this.mode === 'creative') return false;
     const s = this.slots[this.selected];
-    const t = toolOf(s?.id);
-    if (!s || !t) return false;
-    s.dur = (s.dur ?? t.durability) - 1;
+    const d = s ? durabilityOf(s.id) : 0;
+    if (!s || !d) return false;
+    s.dur = (s.dur ?? d) - 1;
     if (s.dur <= 0) {
       this.slots[this.selected] = null;
       this.changed();
@@ -126,7 +126,7 @@ export class Inventory {
   }
 
   canCraft(r: Recipe, stations: Set<Station>): boolean {
-    if (!stations.has(r.station)) return false;
+    if (r.station === 'furnace' || !stations.has(r.station)) return false;
     if (this.mode === 'creative') return true;
     return this.resolve(r) !== null;
   }
@@ -155,7 +155,7 @@ export class Inventory {
       }
     }
     if (this.mode === 'creative') {
-      this.slots[this.selected] = { id, count: maxStackOf(id) };
+      this.slots[this.selected] = { id, count: maxStackOf(id), ...(durabilityOf(id)?{dur:durabilityOf(id)}:{}) };
       this.changed();
       return true;
     }
@@ -218,9 +218,9 @@ export class Inventory {
     const inv = new Inventory(mode);
     data.slots.slice(0, INVENTORY_SIZE).forEach((s, i) => {
       if (Array.isArray(s) && typeof s[0] === 'number' && typeof s[1] === 'number' && isValidItem(s[0]) && s[1] > 0) {
-        const t = toolOf(s[0]);
+        const d = durabilityOf(s[0]);
         inv.slots[i] = { id: s[0], count: Math.min(maxStackOf(s[0]), Math.floor(s[1])) };
-        if (t) inv.slots[i]!.dur = typeof s[2] === 'number' && s[2] > 0 ? Math.min(t.durability, s[2]) : t.durability;
+        if (d) inv.slots[i]!.dur = typeof s[2] === 'number' && s[2] > 0 ? Math.min(d, s[2]) : d;
       }
     });
     inv.selected = typeof data.selected === 'number' ? Math.max(0, Math.min(8, Math.floor(data.selected))) : 0;

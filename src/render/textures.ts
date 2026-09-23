@@ -111,7 +111,30 @@ function sideWithCap(t: Tile, capPalette: RGBA[], edge: RGBA): void {
   }
 }
 
+function drawCrop(t: Tile, stage: number): void {
+  t.fill(()=>[0,0,0,0]);
+  for(const x of [3,7,11,14])for(let y=15;y>12-stage*3;y--){t.set(x,y,hex(stage===3?'#ae8a37':'#537e32')); if(y%3===0){t.set(x-1,y,hex(stage===3?'#e6c166':'#8eb853'));t.set(x+1,y-1,hex(stage===3?'#d2ab4b':'#699a42'));}}
+}
+
 const painters: Record<TileName, (t: Tile) => void> = {
+  chest_front(t) {
+    noisy(t, ['#6e4529','#9b6838','#be8e4b'].map(h=>hex(h)));
+    for(let y=0;y<16;y++) for(let x=0;x<16;x++) {
+      if(y===0||y===5||y===15||x===0||x===15)t.set(x,y,hex('#392c20'));
+      if(x>=7&&x<=9&&y>=4&&y<=8)t.set(x,y,hex(x===7?'#f6d77e':'#a08443'));
+    }
+  },
+  chest_top(t) { painters.oak_planks(t); for(let i=0;i<16;i++){t.set(i,0,hex('#4d3423'));t.set(i,15,hex('#4d3423'));t.set(0,i,hex('#4d3423'));t.set(15,i,hex('#4d3423'));} },
+  furnace_lit(t) { painters.furnace_front(t); for(let y=9;y<14;y++)for(let x=4;x<12;x++)t.set(x,y,hex(y<11?'#ffdf83':x%3?'#e95d26':'#8c341d')); },
+  bed_top(t) { t.fill((x,y)=>hex(y<5?'#e9e4cb':(x+y)%5===0?'#a74735':'#ba5540')); },
+  bed_side(t) { t.fill((x,y)=>hex(y<10?((x+y)%5===0?'#a74735':'#ba5540'):y<12?'#e9d7b5':'#785033')); },
+  door(t) { painters.oak_planks(t); for(let y=0;y<16;y++)for(let x=0;x<16;x++){ if(x<2||x>13||y===0||y===15)t.set(x,y,hex('#604128')); if(x>3&&x<12&&y>2&&y<7)t.set(x,y,hex(x===7||x===8?'#694a2c':'#739c9c')); if(x===12&&y===10)t.set(x,y,hex('#e5c275')); } },
+  gate(t) { t.fill((x,y)=>hex('#a67a43',x<3||x>12||(y>3&&y<6)||(y>10&&y<13)?255:0)); },
+  ladder(t) { t.fill((x,y)=>hex(x<4?'#b58a4e':'#8b5c31',(x>1&&x<4)||(x>11&&x<14)||(x>2&&x<13&&y%5<2)?255:0)); },
+  farmland(t) { t.fill((x,y)=>hex(y%4===0?'#452d23':(x+y)%3===0?'#76513a':'#5c3f2b')); },
+  crop_young(t) { drawCrop(t,0); }, crop_mid(t) { drawCrop(t,1); }, crop_tall(t) { drawCrop(t,2); }, crop_ripe(t) { drawCrop(t,3); },
+  grave(t) { t.fill((x,y)=>hex(x<2||x>13||y<2||y>13?'#3e4f36':y===5?'#9caf73':'#657e49')); for(let y=6;y<10;y++)for(let x=6;x<10;x++)t.set(x,y,hex('#e6dca6')); },
+  village_post(t) { painters.oak_planks(t); for(let y=3;y<13;y++)for(let x=2;x<14;x++)t.set(x,y,hex(y%3===0&&x<11?'#697051':'#eee0b3')); },
   grass_top(t) {
     noisy(t, GRASS, 4, 0.45);
     for (let k = 0; k < 10; k++) t.set(Math.floor(t.rand() * 16), Math.floor(t.rand() * 16), hex('#82aa61'));
