@@ -12,6 +12,8 @@ export class HeldItem {
   private mesh: THREE.Mesh | null = null;
   private currentId = -1;
   private swing = 0;
+  private bobX = 0;
+  private bobY = 0;
   use:'none'|'eat'|'bow'|'block'='none';
   useProgress=0;
   private offhand=new THREE.Group();
@@ -56,8 +58,9 @@ export class HeldItem {
       this.mesh = null;
     }
     this.equip = 0;
+    this.swing = 0;
     this.arm.visible = true;
-    this.arm.position.set(id ? -.085 : -.025, id ? -.07 : .08, .05);
+    this.arm.position.set(id ? 0 : -.025, id ? -.06 : .08, .05);
     this.arm.rotation.set(-.42, -.12, -.17);
     if (!id) return;
     if (id >= 256) {
@@ -72,9 +75,17 @@ export class HeldItem {
       this.mesh = new THREE.Mesh(this.geometries.get(id), mat);
       this.mesh.frustumCulled = false;
       const tool = !!toolOf(id);
-      this.mesh.scale.setScalar(tool ? .61 : .47);
-      this.mesh.rotation.set(-.08, -.38, tool ? -.18 : .12);
-      this.mesh.position.set(tool ? .03 : -.035, tool ? .15 : .05, -.055);
+      this.mesh.scale.setScalar(tool ? .64 : .40);
+      // Sprite handle runs bottom-left to top-right. Rotate it upright and
+      // place its lower grip (pixel 9,24) inside the fist, not at mesh centre.
+      this.mesh.rotation.set(-.12, -.30, tool ? .30 : .08);
+      if (tool) {
+        const grip = new THREE.Vector3(9 / 32 - .5, .5 - 24 / 32, 0);
+        grip.multiply(this.mesh.scale).applyEuler(this.mesh.rotation);
+        this.mesh.position.set(-grip.x, .025 - grip.y, -grip.z);
+      } else {
+        this.mesh.position.set(-.015, .10, -.04);
+      }
       this.holder.add(this.mesh);
       return;
     }
@@ -94,29 +105,36 @@ export class HeldItem {
       this.mesh.scale.setScalar(0.27);
       this.mesh.rotation.set(0.08, Math.PI / 4 + 0.05, 0);
     }
+    this.mesh.position.set(0, .10, -.07);
     this.holder.add(this.mesh);
   }
 
   triggerSwing(): void {
     // Do not restart mid-stroke when dig sounds or break events arrive.
-    if (this.swing <= 0.03) this.swing = 1;
+    if (this.swing === 0) this.swing = 1;
   }
 
   update(dt: number, aspect: number, bobPhase: number, bobAmount: number, brightness: number): void {
-    this.camera.aspect = aspect;
-    this.camera.updateProjectionMatrix();
+    if (this.camera.aspect !== aspect) {
+      this.camera.aspect = aspect;
+      this.camera.updateProjectionMatrix();
+    }
+    dt = Math.max(0, Math.min(dt, .1));
     this.swing = Math.max(0, this.swing - dt / .32);
     this.equip = Math.min(1, this.equip + dt * 5);
     const t = 1 - this.swing;
     const active = this.swing > 0 ? 1 : 0;
-    const arc = Math.sin(Math.sqrt(t) * Math.PI) * active;
+    const arc = Math.sin(t * Math.PI) ** 2 * active;
     const strike = Math.sin(t * Math.PI) * active;
     const windup = Math.sin(t * Math.PI * 2) * active;
-    const bx = Math.cos(bobPhase) * 0.018 * bobAmount;
-    const by = -Math.abs(Math.sin(bobPhase)) * 0.022 * bobAmount;
+    // Ground contact and speed can change within a physics substep. Filter
+    // only locomotion offsets: aiming stays camera-locked and swings stay crisp.
+    const blend = -Math.expm1(-14 * dt);
+    this.bobX += (Math.cos(bobPhase) * .012 * bobAmount - this.bobX) * blend;
+    this.bobY += (-Math.abs(Math.sin(bobPhase)) * .016 * bobAmount - this.bobY) * blend;
     const drop = (1 - this.equip) * 0.35;
-    this.holder.position.set(.46 + bx - arc * .32, -.43 + by - drop + windup * .09, -.8 - strike * .19);
-    this.holder.rotation.set(-strike * .9, -arc * .55, windup * .24 + strike * .38);
+    this.holder.position.set(.43 + this.bobX - arc * .25, -.40 + this.bobY - drop + windup * .055, -.85 - strike * .12);
+    this.holder.rotation.set(-strike * .65, -arc * .32, windup * .15 + strike * .25);
     this.offhand.visible=this.use==='block';
     if(this.use==='eat'){const chew=Math.sin(this.useProgress*32);this.holder.position.set(.08+chew*.018,-.25+Math.abs(chew)*.06,-.57);this.holder.rotation.set(.15,0,-.55+chew*.1);}
     if(this.use==='bow'){this.holder.position.set(.1,-.28,-.82+this.useProgress*.13);this.holder.rotation.set(0,-.15,-.28);}

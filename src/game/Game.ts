@@ -63,6 +63,8 @@ export class Game {
   readonly physics = new WorldPhysics(this.world);
   readonly effects: WorldEffects;
   private cinematic = false;
+  private cameraBobX = 0;
+  private cameraBobY = 0;
   private lightPreset = 0;
   private viewpoint = 0;
   private createdAt = Date.now();
@@ -513,8 +515,11 @@ export class Game {
       bobY = Math.abs(Math.sin(phase)) * 0.045 * amount;
       bobX = Math.cos(phase) * 0.02 * amount;
     }
+    const bobBlend = -Math.expm1(-14 * Math.max(0, dt));
+    this.cameraBobX += (bobX - this.cameraBobX) * bobBlend;
+    this.cameraBobY += (bobY - this.cameraBobY) * bobBlend;
     const yaw = p.yaw + this.titleSpin;
-    cam.position.set(p.x + Math.cos(yaw) * bobX, p.y + EYE_HEIGHT + bobY, p.z - Math.sin(yaw) * bobX);
+    cam.position.set(p.x + Math.cos(yaw) * this.cameraBobX, p.y + EYE_HEIGHT + this.cameraBobY, p.z - Math.sin(yaw) * this.cameraBobX);
     cam.rotation.set(p.pitch, yaw, 0, 'YXZ');
     cam.updateMatrixWorld();
 
